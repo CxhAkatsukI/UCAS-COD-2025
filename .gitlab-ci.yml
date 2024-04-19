@@ -120,7 +120,7 @@ custom_sim:
   stage: bhv_sim
   allow_failure: true
   script:
-    - make FPGA_PRJ=ucas-cod FPGA_BD=nf SIM_TARGET=custom_cpu SIM_DUT=$CPU_ISA:$SIM_DUT_TYPE WORKLOAD=simple_test:$SIM_SET:$BENCH bhv_sim
+    - make FPGA_PRJ=ucas-cod FPGA_BD=nf SIM_TARGET=custom_cpu SIM_DUT=$CPU_ISA:$SIM_DUT_TYPE WORKLOAD=simple_test:$SIM_SET:$BENCH bhv_sim_verilator
   parallel:
     matrix:
       - SIM_SET: basic
@@ -131,6 +131,8 @@ custom_sim:
         BENCH: [shuixianhua,sub-longlong,bit,recursion,fact,add-longlong,shift,wanshu,goldbach,leap-year,prime,mul-longlong,load-store,to-lower-case,movsx,matrix-mul,unalign]
       - SIM_SET: hello
         BENCH: [hello]
+      - SIM_SET: microbench
+        BENCH: [fib,md5,qsort,queen,sieve,ssort]
   rules:
     - if: '$TARGET_DESIGN == "custom_cpu" && $SIM_DUT_TYPE == "multi_cycle"'
   timeout: 3 hours
@@ -144,7 +146,7 @@ turbo_sim:
   stage: bhv_sim
   allow_failure: true
   script:
-    - make FPGA_PRJ=ucas-cod FPGA_BD=nf SIM_TARGET=custom_cpu SIM_DUT=$CPU_ISA:$SIM_DUT_TYPE WORKLOAD=simple_test:$SIM_SET:$BENCH bhv_sim
+    - make FPGA_PRJ=ucas-cod FPGA_BD=nf SIM_TARGET=custom_cpu SIM_DUT=$CPU_ISA:$SIM_DUT_TYPE WORKLOAD=simple_test:$SIM_SET:$BENCH bhv_sim_verilator
   parallel:
     matrix:
       - SIM_SET: basic

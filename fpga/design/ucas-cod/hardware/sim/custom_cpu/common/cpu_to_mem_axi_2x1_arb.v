@@ -1,3 +1,5 @@
+/* verilator lint_off PINMISSING */
+/* verilator lint_off WIDTH */
 module cpu_to_mem_axi_2x1_arb #(
     // Width of data bus in bits
     parameter DATA_WIDTH = 32,

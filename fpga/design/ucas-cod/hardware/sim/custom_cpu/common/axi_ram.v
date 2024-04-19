@@ -1,3 +1,7 @@
+/* verilator lint_off PINMISSING */
+/* verilator lint_off WIDTH */
+/* verilator lint_off CASEINCOMPLETE */
+
 `timescale 10ns / 1ns
 
 /*

@@ -11,14 +11,16 @@ SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/$(SIM_TARGET)/cache/*.v)
 SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/$(SIM_TARGET)/dma/*.v)
 SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/../wrapper/$(SIM_TARGET)/*.v)
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.v)
+SIM_SRCS += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.cpp))
+SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.sv)
+SIM_SRCS += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.a))
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.v)
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/common/*.v)
 
-IV_FLAGS := -I ../
-IV_FLAGS += -I $(SIM_SRC_LOC)/$(SIM_TARGET)
-IV_FLAGS += -I $(RTL_SRC_LOC)/$(SIM_TARGET)/$(DUT_ISA)/include
-IV_FLAGS += -DTRACE_FILE=\"$(TRACE_FILE)\"
-IV_FLAGS += -grelative-include
+IV_FLAGS := --trace-fst
+IV_FLAGS += +incdir+$(SIM_SRC_LOC)/$(SIM_TARGET)
+IV_FLAGS += +incdir+$(RTL_SRC_LOC)/$(SIM_TARGET)/$(DUT_ISA)/include
+IV_FLAGS += --relative-includes
 
 # Parsing user-defined architectural options
 ARCH_OPTION_TCL := $(RTL_SRC_LOC)/$(SIM_TARGET)/arch_options.tcl
@@ -37,4 +39,4 @@ endif
 # Use FST format for waveform to provide better compression ratio
 # Waveform file size would be reduced by about 10x.
 PLUSARGS += -fst
-PLUSARGS += +INITMEM="$(MEM_FILE)"
+PLUSARGS += +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"

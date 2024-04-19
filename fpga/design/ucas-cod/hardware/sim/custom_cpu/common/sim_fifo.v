@@ -1,3 +1,4 @@
+/* verilator lint_off WIDTH */
 `timescale 10ns / 1ns
 module sim_fifo
 #(  // Parameters
