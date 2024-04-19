@@ -1,34 +1,16 @@
-`timescale 1ns / 1ps
+`timescale 10ns / 1ns
 
-module custom_cpu_test
-();
-
-    reg	sys_clk;
-	reg	sys_reset_n;
-
-	initial begin
-		sys_clk = 1'b0;
-		sys_reset_n = 1'b0;
-		# 100
-		sys_reset_n = 1'b1;
-	end
-    
-    always begin
-	    # 5 sys_clk = ~sys_clk;
-    end
-
-	always begin
-		# 20000000 $display("Simulated %d ns", $time);
-	end
+module custom_cpu_test(
+	input sys_clk,
+	input sys_reset_n
+);
 
 	cpu_test_top    u_cpu_test (
 		.sys_clk	    (sys_clk),
 		.sys_reset_n	(sys_reset_n)
 	);
-    
-    `define MEM_WEN     u_cpu_test.u_cpu.MemWrite
-    `define MEM_ADDR	u_cpu_test.u_cpu.Address
-    `define MEM_WDATA	u_cpu_test.u_cpu.Write_data
+
+`define GLOBAL_RESULT u_cpu_test.u_axi_ram_wrap.ram.mem[3]
 
     wire [31:0] pc_rt       = u_cpu_test.u_cpu.inst_retire[31:0 ];
     wire [31:0] rf_wdata_rt = u_cpu_test.u_cpu.inst_retire[63:32];
@@ -41,8 +23,10 @@ module custom_cpu_test
 
     // Open trace file
     integer trace_file, type_num, ret;
+    reg [4095:0] trace_filename;
     initial begin
-        trace_file = $fopen(`TRACE_FILE, "r");
+        $value$plusargs("TRACE_FILE=%s", trace_filename);
+	trace_file = $fopen(trace_filename, "r");
         if(trace_file == 0)
 	    begin
 		    $display("ERROR: open file failed.");
@@ -57,16 +41,19 @@ module custom_cpu_test
     reg        mem_read_ref;
 
     reg trace_end;
+    reg has_compared;
 
-    // Get golden records
+    // Get golden records & Compare result
     always @(posedge sys_clk) begin 
-        if (~sys_reset_n)
+        if (~sys_reset_n) begin
             trace_end <= 1'b0;
+            has_compared <= 1'b1;
+        end
         else begin
             if ($feof(trace_file))
                 trace_end <= 1'b1;
-            #1;
-            if (has_compared) begin
+
+            if (rf_en_rt !== 1'b1 & has_compared) begin
             	if ($feof(trace_file))
                 	trace_end <= 1'b1;
 
@@ -105,23 +92,13 @@ module custom_cpu_test
                     endcase
                 end
             end
-        end
-    end
-
-    // Compare result
-    reg has_compared;
-    always @(posedge sys_clk)
-    begin
-        if (~sys_reset_n)
-            has_compared <= 1'b1;
-        else begin
-            #3;
-            if(rf_en_rt & rf_waddr_rt != 5'd0)
+            
+            if(rf_en_rt & rf_waddr_rt != 5'd0 && ~trace_end)
             begin
                 if ((pc_rt !== pc_golden) || (rf_waddr_rt !== rf_waddr_golden) || ((rf_wdata_rt & rf_bit_cmp_ref) !== (rf_wdata_golden & rf_bit_cmp_ref)))
                 begin
                     $display("===================================================================");
-                    $display("ERROR: at %dns.", $time);
+                    $display("ERROR: at %d0ns.", $time);
                     $display("Yours:     PC = 0x%8h, rf_waddr = 0x%2h, rf_wdata = 0x%8h", pc_rt, rf_waddr_rt, rf_wdata_rt);
                     $display("Reference: PC = 0x%8h, rf_waddr = 0x%2h, rf_wdata = 0x%8h", pc_golden, rf_waddr_golden, rf_wdata_golden);
                     $display("===================================================================");
@@ -135,14 +112,20 @@ module custom_cpu_test
                 has_compared <= 1'b0;
         end
     end
-
-    // End
-    always @(posedge sys_clk)
-    begin
-        if (trace_end & (`MEM_WEN == 1'b1) & (`MEM_ADDR == 32'h0C) & (`MEM_WDATA == 32'h0))
+    
+    always @(posedge sys_clk) begin
+        if (`GLOBAL_RESULT == 32'h0)
         begin
             $display("=================================================");
-            $display("Benchmark simulation passed!!!");
+            $display("Hit good trap");
+            $display("=================================================");
+            $fclose(trace_file);
+            $finish;
+        end
+        if (`GLOBAL_RESULT == 32'h1)
+        begin
+            $display("=================================================");
+            $display("ERROR: Hit bad trap");
             $display("=================================================");
             $fclose(trace_file);
             $finish;

@@ -1,7 +1,7 @@
-.PHONY: bhv_sim wav_chk
+.PHONY: bhv_sim bhv_sim_cpl wav_chk
 
 SIM_SRC_LOC := fpga/design/ucas-cod/hardware/sim
-RTL_SRC_LOC := $(SIM_SRC_LOC)/../sources/
+RTL_SRC_LOC := $(SIM_SRC_LOC)/../sources
 SIM_OBJ_LOC := fpga/sim_out/$(SIM_TARGET)
 EMU_OBJ_LOC := fpga/emu_out
 
@@ -28,6 +28,20 @@ endif
 ifneq ($(SIM_TARGET),)
 include $(SIM_SRC_LOC)/$(SIM_TARGET)/sim.mk
 endif
+
+$(SIM_OBJ_LOC)/$(SIM_TARGET): $(SIM_SRCS)
+	@mkdir -p $(SIM_OBJ_LOC)
+	git clone https://gitlab.agileserve.org.cn:8001/congrongye2021/verilator_include.git
+	@cp -rf verilator_include /usr/local/include/verilator_include
+	
+	verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(IV_FLAGS) $(SIM_SRCS)
+	
+	make -C $(SIM_OBJ_LOC) -f V$(SIM_TOP).mk VERILATOR_ROOT=/usr/local/include/verilator_include $(SIM_TARGET)
+	$(SIM_OBJ_LOC)/$(SIM_TARGET) +DUMP="$(SIM_DUMP)" +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"
+	
+
+bhv_sim_verilator: $(SIM_OBJ_LOC)/$(SIM_TARGET)
+	@verilator --lint-only --top-module $(SIM_TOP) $(IV_FLAGS) $(SIM_SRCS)
 
 bhv_sim:
 	@mkdir -p $(SIM_OBJ_LOC)

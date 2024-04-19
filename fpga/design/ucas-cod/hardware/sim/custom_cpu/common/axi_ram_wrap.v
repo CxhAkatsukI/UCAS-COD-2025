@@ -1,3 +1,7 @@
+/* verilator lint_off PINMISSING */
+/* verilator lint_off IMPLICIT */
+/* verilator lint_off WIDTH */
+
 module axi_ram_wrap #
 (
     // Width of data bus in bits

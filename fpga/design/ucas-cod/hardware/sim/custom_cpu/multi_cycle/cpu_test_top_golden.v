@@ -11,6 +11,9 @@
 *===========================================
 */
 
+/* verilator lint_off PINMISSING */
+/* verilator lint_off UNOPTFLAT */
+
 `timescale 10 ns / 1 ns
 
 module cpu_test_top_golden  #

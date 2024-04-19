@@ -8,6 +8,8 @@
 *===========================================
 */
 
+/* verilator lint_off PINMISSING */
+
 `timescale 10 ns / 1 ns
 
 module dcache_wrapper (

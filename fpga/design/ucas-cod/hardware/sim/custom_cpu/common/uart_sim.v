@@ -1,3 +1,4 @@
+/* verilator lint_off WIDTH */
 `define COUNTER_BIT 7
 module uart_sim #(
     parameter UART_SIM = 1
