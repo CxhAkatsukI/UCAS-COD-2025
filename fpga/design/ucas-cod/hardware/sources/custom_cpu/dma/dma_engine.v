@@ -67,6 +67,7 @@ module dma_engine  #(
     wire  [31:0]  fifo_rdata;
     wire          fifo_is_empty;
     wire          fifo_is_full;
+    wire  [7:0]   fifo_count;
       
     wire  [31:0]  src_base;
     wire  [31:0]  dest_base;
@@ -168,7 +169,8 @@ module dma_engine  #(
 	  .data_out  (fifo_rdata),
 	  
 	  .empty     (fifo_is_empty),
-	  .full      (fifo_is_full)
+	  .full      (fifo_is_full),
+    .fifo_count(fifo_count)
   );
 
 endmodule
