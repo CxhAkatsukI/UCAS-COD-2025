@@ -12,7 +12,15 @@ module axi_ram #
     // Width of data bus in bits
     parameter DATA_WIDTH = 32,
     // Width of address bus in bits
+<<<<<<< 40e9058c99daa2f1b255ab7e0edf67c9146c4f4e
+`ifdef AXI_RAM_ADDR_WIDTH
+    parameter ADDR_WIDTH = `AXI_RAM_ADDR_WIDTH,
+`else
     parameter ADDR_WIDTH = 30,
+`endif
+=======
+    parameter ADDR_WIDTH = 30,
+>>>>>>> efbab9d5dcf45e824c7c96aea51fe2bb6308f4b2
     // Width of wstrb (width of data bus in words)
     parameter STRB_WIDTH = (DATA_WIDTH/8),
     // Width of ID signal

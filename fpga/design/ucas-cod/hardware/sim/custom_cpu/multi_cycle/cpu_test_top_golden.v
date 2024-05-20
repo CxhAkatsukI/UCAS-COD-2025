@@ -21,7 +21,7 @@ module cpu_test_top_golden  #
     // Width of data bus in bits
     parameter DATA_WIDTH = 32,
     // Width of address bus in bits
-    parameter ADDR_WIDTH = 14,
+    parameter ADDR_WIDTH = 30,
     // Width of wstrb (width of data bus in words)
     parameter STRB_WIDTH = (DATA_WIDTH/8),
     // Width of ID signal
