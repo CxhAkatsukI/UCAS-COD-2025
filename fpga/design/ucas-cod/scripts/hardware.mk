@@ -17,7 +17,7 @@ LIKELY_BENCH  := $(shell echo $(WORKLOAD) | awk -F ":" '{print $$3}')
 
 ifeq ($(LIKELY_BENCH),)
 BENCH       := $(LIKELY_GROUP)
-BENCH_GROUP := 
+BENCH_GROUP :=
 else
 BENCH       := $(LIKELY_BENCH)
 BENCH_GROUP := $(LIKELY_GROUP)
@@ -33,19 +33,17 @@ $(SIM_OBJ_LOC)/$(SIM_TARGET): $(SIM_SRCS)
 	@mkdir -p $(SIM_OBJ_LOC)
 	git clone https://gitlab.agileserve.org.cn:8001/congrongye2021/verilator_include.git
 	@cp -rf verilator_include /usr/local/include/verilator_include
-	
+	rm -rf verilator_include
 	verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(IV_FLAGS) $(SIM_SRCS)
-	
 	make -C $(SIM_OBJ_LOC) -f V$(SIM_TOP).mk VERILATOR_ROOT=/usr/local/include/verilator_include $(SIM_TARGET)
 	$(SIM_OBJ_LOC)/$(SIM_TARGET) +DUMP="$(SIM_DUMP)" +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"
-	
 
 bhv_sim_verilator: $(SIM_OBJ_LOC)/$(SIM_TARGET)
 	@verilator --lint-only --top-module $(SIM_TOP) $(IV_FLAGS) $(SIM_SRCS)
 
 bhv_sim:
 	@mkdir -p $(SIM_OBJ_LOC)
-	iverilog -o $(SIM_BIN) -s $(SIM_TOP) $(IV_FLAGS) $(SIM_SRCS)
+	iverilog -o $(SIM_BIN) -s $(SIM_TOP_IV) $(IV_FLAGS) $(SIM_SRCS) $(SIM_SRCS_IV)
 	vvp $(VVP_FLAGS) $(SIM_BIN) +DUMP="$(SIM_DUMP)" $(PLUSARGS) | tee bhv_sim.log && bash fpga/err_det.sh bhv_sim.log
 
 wav_chk:

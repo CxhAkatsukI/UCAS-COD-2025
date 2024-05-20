@@ -132,7 +132,7 @@ custom_sim:
       - SIM_SET: hello
         BENCH: [hello]
       - SIM_SET: microbench
-        BENCH: [fib,md5,qsort,queen,sieve,ssort]
+        BENCH: [fib,md5,qsort,queen,sieve,ssort,15pz,bf,dinic]
   rules:
     - if: '$TARGET_DESIGN == "custom_cpu" && $SIM_DUT_TYPE == "multi_cycle"'
   timeout: 3 hours
@@ -155,6 +155,8 @@ turbo_sim:
         BENCH: [sum,mov-c,fib,add,if-else,pascal,quick-sort,select-sort,max,min3,switch,bubble-sort]
       - SIM_SET: advanced
         BENCH: [shuixianhua,sub-longlong,bit,recursion,fact,add-longlong,shift,wanshu,goldbach,leap-year,prime,mul-longlong,load-store,to-lower-case,movsx,matrix-mul,unalign]
+      - SIM_SET: microbench
+        BENCH: [fib,md5,qsort,queen,sieve,ssort,15pz,bf,dinic]
   rules:
     - if: '$TARGET_DESIGN == "custom_cpu" && $SIM_DUT_TYPE == "turbo"'
   timeout: 3 hours

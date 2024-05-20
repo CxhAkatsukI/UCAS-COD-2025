@@ -1,4 +1,5 @@
 SIM_TOP := custom_cpu_test
+SIM_TOP_IV := custom_cpu_test_iverilog
 
 SIM_BIN := $(SIM_OBJ_LOC)/sim.vvp
 SIM_DUMP := $(SIM_OBJ_LOC)/dump.fst
@@ -30,10 +31,12 @@ USE_DCACHE     := $(shell cat $(ARCH_OPTION_TCL) | grep "dcache" | awk '{print $
 
 ifeq ($(USE_ICACHE),1)
 IV_FLAGS += -DUSE_ICACHE
+VL_FLAGS += -DUSE_ICACHE
 endif
 
 ifeq ($(USE_DCACHE),1)
 IV_FLAGS += -DUSE_DCACHE
+VL_FLAGS += -DUSE_DCACHE
 endif
 
 # Use FST format for waveform to provide better compression ratio
