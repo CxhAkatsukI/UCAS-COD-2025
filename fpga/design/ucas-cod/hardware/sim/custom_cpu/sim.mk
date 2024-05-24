@@ -12,16 +12,27 @@ SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/$(SIM_TARGET)/cache/*.v)
 SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/$(SIM_TARGET)/dma/*.v)
 SIM_SRCS += $(wildcard $(RTL_SRC_LOC)/../wrapper/$(SIM_TARGET)/*.v)
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.v)
-SIM_SRCS += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.cpp))
-SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.sv)
-SIM_SRCS += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.a))
-SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.v)
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/common/*.v)
 
-IV_FLAGS := --trace-fst
-IV_FLAGS += +incdir+$(SIM_SRC_LOC)/$(SIM_TARGET)
-IV_FLAGS += +incdir+$(RTL_SRC_LOC)/$(SIM_TARGET)/$(DUT_ISA)/include
-IV_FLAGS += --relative-includes
+SIM_SRCS_IV := $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.v)
+
+SIM_SRCS_VL := $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.sv)
+SIM_SRCS_VL += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.cpp))
+SIM_SRCS_VL += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.a))
+
+IV_FLAGS := -I ../
+IV_FLAGS += -I $(SIM_SRC_LOC)/$(SIM_TARGET)
+IV_FLAGS += -I $(RTL_SRC_LOC)/$(SIM_TARGET)/$(DUT_ISA)/include
+IV_FLAGS += -DTRACE_FILE=\"$(TRACE_FILE)\"
+IV_FLAGS += -DAXI_RAM_ADDR_WIDTH=14
+IV_FLAGS += -grelative-include
+IV_FLAGS += -g2012
+
+VL_FLAGS := --trace-fst
+VL_FLAGS += +incdir+$(SIM_SRC_LOC)/$(SIM_TARGET)
+VL_FLAGS += +incdir+$(RTL_SRC_LOC)/$(SIM_TARGET)/$(DUT_ISA)/include
+VL_FLAGS += --relative-includes
+VL_FLAGS += -DTRACE_FILE=\"$(TRACE_FILE)\"	# unnecessary, just to get custom_cpu_test_iverilog compiled in verilator
 
 # Parsing user-defined architectural options
 ARCH_OPTION_TCL := $(RTL_SRC_LOC)/$(SIM_TARGET)/arch_options.tcl
