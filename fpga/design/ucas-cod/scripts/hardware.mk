@@ -29,17 +29,24 @@ ifneq ($(SIM_TARGET),)
 include $(SIM_SRC_LOC)/$(SIM_TARGET)/sim.mk
 endif
 
-$(SIM_OBJ_LOC)/$(SIM_TARGET): $(SIM_SRCS)
+VERILATOR_PATH := $(shell pwd)/fpga/sim_out/verilator
+
+$(SIM_OBJ_LOC)/$(SIM_TARGET): $(SIM_SRCS) $(ARCH_OPTION_TCL)
 	@mkdir -p $(SIM_OBJ_LOC)
-	git clone https://gitlab.agileserve.org.cn:8001/congrongye2021/verilator_include.git
-	@cp -rf verilator_include /usr/local/include/verilator_include
-	rm -rf verilator_include
-	verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(IV_FLAGS) $(SIM_SRCS)
-	make -C $(SIM_OBJ_LOC) -f V$(SIM_TOP).mk VERILATOR_ROOT=/usr/local/include/verilator_include $(SIM_TARGET)
+	if [ ! -d $(VERILATOR_PATH) ]; then \
+		git clone --depth=1 https://gitlab.agileserve.org.cn:8001/xujinsheng22/cod-verilator-bin.git $(VERILATOR_PATH); \
+		chmod -R +x $(VERILATOR_PATH)/bin; \
+	fi
+	$(VERILATOR_PATH)/bin/verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_VL)
+	make -C $(SIM_OBJ_LOC) -f V$(SIM_TOP).mk VERILATOR_ROOT=$(VERILATOR_PATH) $(SIM_TARGET)
+
+bhv_sim_verilator: $(SIM_OBJ_LOC)/$(SIM_TARGET) $(ARCH_OPTION_TCL)
+	-$(VERILATOR_PATH)/bin/verilator --lint-only --top-module $(SIM_TOP) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_VL)
 	$(SIM_OBJ_LOC)/$(SIM_TARGET) +DUMP="$(SIM_DUMP)" +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"
 
-bhv_sim_verilator: $(SIM_OBJ_LOC)/$(SIM_TARGET)
-	@verilator --lint-only --top-module $(SIM_TOP) $(IV_FLAGS) $(SIM_SRCS)
+ifndef SIM_TOP_IV
+SIM_TOP_IV := $(SIM_TOP)
+endif
 
 bhv_sim:
 	@mkdir -p $(SIM_OBJ_LOC)

@@ -4,7 +4,11 @@ module cpu_to_mem_axi_2x1_arb #(
     // Width of data bus in bits
     parameter DATA_WIDTH = 32,
     // Width of address bus in bits
+`ifdef AXI_RAM_ADDR_WIDTH
+    parameter ADDR_WIDTH = `AXI_RAM_ADDR_WIDTH,
+`else
     parameter ADDR_WIDTH = 30,
+`endif
     // Width of wstrb (width of data bus in words)
     parameter STRB_WIDTH = (DATA_WIDTH/8),
     // Width of ID signal
