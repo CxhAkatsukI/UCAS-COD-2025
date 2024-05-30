@@ -135,7 +135,7 @@ custom_sim:
         BENCH: [fib,md5,qsort,queen,sieve,ssort,15pz,bf,dinic]
   rules:
     - if: '$TARGET_DESIGN == "custom_cpu" && $SIM_DUT_TYPE == "multi_cycle"'
-  timeout: 3 hours
+  timeout: 30 mins
   artifacts:
     name: "$CI_JOB_STAGE-$CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA"
     when: on_failure
