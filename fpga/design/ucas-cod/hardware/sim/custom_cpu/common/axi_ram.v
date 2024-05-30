@@ -15,7 +15,7 @@ module axi_ram #
 `ifdef AXI_RAM_ADDR_WIDTH
     parameter ADDR_WIDTH = `AXI_RAM_ADDR_WIDTH,
 `else
-    parameter ADDR_WIDTH = 30,
+    parameter ADDR_WIDTH = 26,
 `endif
     // Width of wstrb (width of data bus in words)
     parameter STRB_WIDTH = (DATA_WIDTH/8),
