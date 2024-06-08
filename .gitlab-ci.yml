@@ -157,7 +157,7 @@ turbo_sim:
         BENCH: [shuixianhua,sub-longlong,bit,recursion,fact,add-longlong,shift,wanshu,goldbach,leap-year,prime,mul-longlong,load-store,to-lower-case,movsx,matrix-mul,unalign]
   rules:
     - if: '$TARGET_DESIGN == "custom_cpu" && $SIM_DUT_TYPE == "turbo"'
-  timeout: 3 hours
+  timeout: 20 mins
   artifacts:
     name: "$CI_JOB_STAGE-$CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA"
     when: on_failure
