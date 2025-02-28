@@ -7,6 +7,6 @@ module adder (
 );
 
   /*TODO: Please add your logic design here*/
-  assign result = {7{1'b1}};
+  assign result = operand0 + operand1;
 
 endmodule
