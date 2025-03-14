@@ -12,6 +12,8 @@ module alu (
     output [`DATA_WIDTH - 1:0] Result
 );
   // TODO: Please add your logic design here
+  wire [`DATA_WIDTH - 1:0] temp_result;
+  wire [`DATA_WIDTH - 1:0] temp;
 
   assign Result = ALUop == 3'b000 ? (A & B) : Result;
   assign Zero = ALUop == 3'b000 ? ((ALUop == 3'b000 ? (A & B) : Result) == {`DATA_WIDTH{0}}) : Zero;
