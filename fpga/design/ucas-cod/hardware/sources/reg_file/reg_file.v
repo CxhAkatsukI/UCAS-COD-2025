@@ -15,7 +15,7 @@ module reg_file (
 );
 
   // TODO: Please add your logic design here
-  wire [`DATA_WIDTH - 1:0] data_array[`DATA_WIDTH - 1:0];
+  reg [`DATA_WIDTH - 1:0] data_array[`DATA_WIDTH - 1:0];
   always @(posedge clk) begin
     if (wen && waddr != 0) begin
       data_array[waddr] <= wdata;
