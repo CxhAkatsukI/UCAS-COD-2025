@@ -31,7 +31,7 @@ module alu (
   assign Zero            = ALUop == 3'b110 ? ((ALUop == 3'b110 ? Result : {`DATA_WIDTH{1'bx}}) == {`DATA_WIDTH{0}}) : Zero;
 
   assign temp = ALUop == 3'b111 ? ~B : temp;
-  assign {~CarryOut, temp_result} = ALUop == 3'b111 ? (A + temp + 1'b1) : {~CarryOut, temp_result};
+  assign {CarryOut, temp_result} = ALUop == 3'b111 ? (A + temp + 1'b1) ^ {1, {`DATA_WIDTH{0}}} : {CarryOut, temp_result};
   assign Overflow          = ALUop == 3'b111 ? (A[`DATA_WIDTH - 1] != B[`DATA_WIDTH - 1] && A[`DATA_WIDTH - 1] != temp_result[`DATA_WIDTH - 1]) : Overflow;
   assign Zero              = ALUop == 3'b111 ? ((ALUop == 3'b111 ? temp_result[`DATA_WIDTH-1:0] : {`DATA_WIDTH{1'bx}}) == {`DATA_WIDTH{0}}) : Zero;
   assign Result = ALUop == 3'b111 ? {{(`DATA_WIDTH - 1) {0}}, temp_result[`DATA_WIDTH-1]} : Result;
