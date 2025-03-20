@@ -1,0 +1,5 @@
+VCD info: dumpfile fpga/sim_out/reg_file/dump.vcd opened for output.
+=================================================
+Success: finished reg_file testbench.
+=================================================
+fpga/design/ucas-cod/hardware/sim/reg_file/reg_file_test.v:49: $finish called at 4059 (1ns)
