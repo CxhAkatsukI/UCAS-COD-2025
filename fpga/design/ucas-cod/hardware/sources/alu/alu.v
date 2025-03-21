@@ -11,9 +11,13 @@ module alu (
     output [`DATA_WIDTH - 1:0] Result
 );
 
+wire [32:0] sel_B = 
+    (ALUop == 3'b010) ? B :
+    (ALUop == 3'b110 | ALUop == 3'b111) ? ~B + 1 :
+    1'b0;
 
-wire [`DATA_WIDTH:0] add_result = {1'b0, A} + {1'b0, B};
-wire [`DATA_WIDTH:0] sub_result = {1'b0, A} + {1'b1, ~B} + 1'b1;
+wire [`DATA_WIDTH:0] add_result = A + sel_B;
+wire [`DATA_WIDTH:0] sub_result = add_result;
 
 
 wire add_overflow = (A[`DATA_WIDTH-1] == B[`DATA_WIDTH-1]) && 
