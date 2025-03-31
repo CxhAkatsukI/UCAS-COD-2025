@@ -251,10 +251,7 @@ module simple_cpu (
   );
 
   assign MemWrite = mem_write;
-  assign MemRead = mem_read;
-  assign Write_data = Write_data; // Use RF_wdata as Write_data, as it's the data to be written to memory in store instructions
-  assign Write_strb = Write_strb;  // From load_and_store_controller, already connected
-  assign Address = Address;  // From load_and_store_controller, already connected
+  assign MemRead  = mem_read;
 
 endmodule
 
@@ -273,7 +270,9 @@ module control_unit (
   assign reg_dst = (opcode == 6'b000000) ? 2'b11 :
                  (opcode == 6'b000010 || opcode == 6'b000011) ? 2'b10 :
                  2'b01; // choose rt when others (including r type with funct 0)
-  assign is_branch = (opcode[5:2] == 4'b0001 || opcode == 6'b000001) ? 1'b1 : 1'b0;
+  wire is_branch_sub = (opcode[5:2] == 4'b0001) ? 1'b1 : 1'b0;
+  wire is_branch_slt = (opcode == 6'b000001) ? 1'b1 : 1'b0;
+  assign is_branch = (is_branch_sub || is_branch_slt) ? 1'b1 : 1'b0;
   assign mem_read = (opcode[5:3] == 3'b100) ? 1'b1 : 1'b0;
   assign mem_write = (opcode[5:3] == 3'b101) ? 1'b1 : 1'b0;
   assign reg_write_cond = (opcode[5:3] != 3'b101 && !is_branch) ? 1'b1 : 1'b0;
@@ -299,7 +298,8 @@ module control_unit (
                     sltiu ? 3'b011 :
                     3'b000;
 
-  assign alu_op_cond = is_branch ? 3'b111 :
+  assign alu_op_cond = is_branch_slt ? 3'b111 :
+                      is_branch_sub ? 3'b110 :
                       is_load_store ? 3'b010 :
                       imm_arithmetic ? arith_type :
                       3'b000; // r type
@@ -325,7 +325,7 @@ module reg_write_controller (
   wire jal = (opcode == 6'b000011) ? 1'b1 : 1'b0;  // jump and link instruction
   wire jr = (opcode == 6'b000000 && funct == 6'b001000) ? 1'b1 : 1'b0;  // jump register instruction
   assign reg_write = (input_reg_write_cond && !j && !jr) ? 1'b1 : 1'b0; // only when we can write to the register file
-  wire _reg_dst = {2{reg_write}} & reg_dst_input;  // if reg_write is 1, then we can use
+  wire [1:0] _reg_dst = {2{reg_write}} & reg_dst_input;  // if reg_write is 1, then we can use
   // reg_dst_input, otherwise, we will not use it
   assign reg_dst = (_reg_dst == 2'b11) ? rd :  // if reg_dst is 11, we will use rd
       (_reg_dst == 2'b10) ? 5'b11111 :  // if reg_dst is 10, we will use ra (31)
@@ -353,15 +353,15 @@ module arithmetic_controller (
                             ? 1'b1 : 1'b0; // only r type with sll, srl, sra can be shift operation
 
   wire addu = (funct[2:0] == 3'b001) ? 1'b1 : 1'b0;
-  wire subu = (funct[2:0] == 3'b011) ? 1'b1 : 1'b0;
+  wire subu = (funct[3:0] == 4'b0011) ? 1'b1 : 1'b0;
   wire _and = (funct[2:0] == 3'b100) ? 1'b1 : 1'b0;
   wire _nor = (funct[2:0] == 3'b111) ? 1'b1 : 1'b0;
   wire _or = (funct[2:0] == 3'b101) ? 1'b1 : 1'b0;
   wire _xor = (funct[2:0] == 3'b110) ? 1'b1 : 1'b0;
   wire slt = (funct[2:0] == 3'b010) ? 1'b1 : 1'b0;
-  wire sltu = (funct[2:0] == 3'b011) ? 1'b1 : 1'b0;
+  wire sltu = (funct[3:0] == 4'b1011) ? 1'b1 : 1'b0;
 
-  wire arith_type = addu ? 3'b010 :
+  wire [2:0] arith_type = addu ? 3'b010 :
                     subu ? 3'b110 :
                     _and ? 3'b000 :
                     _nor ? 3'b101 :
@@ -381,7 +381,7 @@ module arithmetic_controller (
   wire srav = (funct[2:0] == 3'b111) ? 1'b1 : 1'b0;  // shift right arithmetic variable
   wire srlv = (funct[2:0] == 3'b110) ? 1'b1 : 1'b0;  // shift right logical variable
 
-  wire shift_type = sll ? 2'b00 :
+  wire [1:0] shift_type = sll ? 2'b00 :
                     sra ? 2'b11 :
                     srl ? 2'b10 :
                     sllv ? 2'b00 :
@@ -433,8 +433,8 @@ module pc_controller (
 
   wire branch_condition_satisfied = (beq && alu_zero) ||
                              (bne && !alu_zero) ||
-                             (blez && (alu_result == 1 || alu_zero == 1)) ||
-                             (bgtz && (alu_result == 0 || alu_zero != 1)) ||
+                             (blez && (alu_result[31] == 1 || alu_zero == 1)) ||
+                             (bgtz && (alu_result[31] == 0 && alu_zero != 1)) ||
                              (bltz && (alu_result == 1)) ||
                              (bgez && (alu_result == 0));  // check if the branch condition is satisfied
 
@@ -517,15 +517,15 @@ module load_and_store_controller (
   wire addr_3 = (addr_offset == 2'b11);
 
   // Define masks (使用wire定义，并直接赋值)
-  wire mask_byte1 = 4'b0001;
-  wire mask_byte2 = 4'b0010;
-  wire mask_byte3 = 4'b0100;
-  wire mask_byte4 = 4'b1000;
-  wire mask_high2 = 4'b1100;
-  wire mask_low2 = 4'b0011;
-  wire mask_high3 = 4'b1110;
-  wire mask_low3 = 4'b0111;
-  wire mask_full = 4'b1111;
+  wire [3:0] mask_byte1 = 4'b0001;
+  wire [3:0] mask_byte2 = 4'b0010;
+  wire [3:0] mask_byte3 = 4'b0100;
+  wire [3:0] mask_byte4 = 4'b1000;
+  wire [3:0] mask_high2 = 4'b1100;
+  wire [3:0] mask_low2 = 4'b0011;
+  wire [3:0] mask_high3 = 4'b1110;
+  wire [3:0] mask_low3 = 4'b0111;
+  wire [3:0] mask_full = 4'b1111;
 
   // Memory Operations Assignments (根据提供的代码片段实现)
   assign mem_addr_o = {mem_addr[31:2], 2'b0};  // 地址计算保持一致，word 对齐
@@ -574,7 +574,7 @@ module load_and_store_controller (
     (lh | lhu) ?  // Load Halfword (Signed or Unsigned)
       (addr_0 ? {{16{(lh & mem_data [15])}}, mem_data [15: 0]} :
        addr_2 ? {{16{(lh & mem_data [31])}}, mem_data [31:16]} :
-                32'bx ) : // Should not happen for properly aligned halfword load
+                32'b0 ) : // Should not happen for properly aligned halfword load
 
       lw ? mem_data :  // Load Word
       lwl ?  // Load Word Left
@@ -587,7 +587,7 @@ module load_and_store_controller (
        addr_1 ? {rf_rdata2 [31:24], mem_data [31: 8]} :
       addr_2 ? {rf_rdata2 [31:16], mem_data [31:16]} :
                 {rf_rdata2 [31: 8], mem_data [31:24]} ) :
-    32'bx; // Default case, should not be reached
+    32'b0; // Default case, should not be reached
 
 endmodule
 
@@ -636,8 +636,8 @@ module alu_src_selector (
     output [31:0] alu_src1,
     output [31:0] alu_src2  // this is the second operand for ALU
 );
-  wire imm_SE = {{16{imm_16[15]}}, imm_16};  // sign extend the immediate value
-  wire imm_0E = {16'b0, imm_16};  // zero extend the immediate value
+  wire [31:0] imm_SE = {{16{imm_16[15]}}, imm_16};  // sign extend the immediate value
+  wire [31:0] imm_0E = {16'b0, imm_16};  // zero extend the immediate value
   wire andi = (opcode == 6'b001100) ? 1'b1 : 1'b0;  // andi instruction
   wire ori = (opcode == 6'b001101) ? 1'b1 : 1'b0;  // ori instruction
   wire xori = (opcode == 6'b001110) ? 1'b1 : 1'b0;  // xori instruction
@@ -701,7 +701,7 @@ module mem_to_reg (
     input [31:0] rs,  // rs from register file, only used for move instruction
     output [31:0] write_data  // data to be written to the register file
 );
-  wire imm_modified = {imm_16, {16{1'b0}}};
+  wire [31:0] imm_modified = {imm_16, {16{1'b0}}};
   assign write_data = (is_alu_operation) ? alu_result :
                       (is_shift_operation) ? shift_result :
                       (memread) ? mem_data :

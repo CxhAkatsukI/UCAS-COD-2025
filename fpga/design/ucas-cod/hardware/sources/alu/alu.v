@@ -11,7 +11,7 @@ module alu (
     output [`DATA_WIDTH - 1:0] Result
 );
 
-wire is_sub = (ALUop == 3'b110 | ALUop == 3'b111) ? 1'b1 : 1'b0;
+wire is_sub = (ALUop == 3'b110 | ALUop == 3'b111 | ALUop == 3'b011) ? 1'b1 : 1'b0;
 
 wire [32:0] sel_B = 
     (ALUop == 3'b010) ? B :
@@ -44,7 +44,7 @@ assign Result =
     (ALUop == 3'b100) ? (A ^ B) :
     (ALUop == 3'b101) ? ~(A | B) :
     (ALUop == 3'b110) ? sub_result[`DATA_WIDTH-1:0] :
-    (ALUop == 3'b011) ? {{(`DATA_WIDTH-1){1'b0}}, CarryOut} : 
+    (ALUop == 3'b011) ? {{(`DATA_WIDTH-1){1'b0}}, sub_carryout} : 
     (ALUop == 3'b111) ? {{(`DATA_WIDTH-1){1'b0}}, slt_result} :
     {`DATA_WIDTH{1'bx}};
 
