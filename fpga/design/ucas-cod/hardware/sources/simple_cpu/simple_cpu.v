@@ -689,63 +689,29 @@ module load_and_store_controller (
 
 
   // -- Load Data Processing (load_data) --
-  // Extract and sign/zero-extend data read from memory based on load type and alignment
-  reg [31:0] load_data_comb; // Use intermediate reg for clarity in complex case
-  always @(*) begin // Combinational logic for load_data
-    case (opcode)
-      6'b100000: // lb - Load Byte (Signed)
-        case (addr_offset)
-          2'b00: load_data_comb = {{24{mem_data[ 7]}}, mem_data[ 7: 0]};
-          2'b01: load_data_comb = {{24{mem_data[15]}}, mem_data[15: 8]};
-          2'b10: load_data_comb = {{24{mem_data[23]}}, mem_data[23:16]};
-          2'b11: load_data_comb = {{24{mem_data[31]}}, mem_data[31:24]};
-          default: load_data_comb = 32'bx; // Should not happen
-        endcase
-      6'b100100: // lbu - Load Byte Unsigned
-        case (addr_offset)
-          2'b00: load_data_comb = {24'b0, mem_data[ 7: 0]};
-          2'b01: load_data_comb = {24'b0, mem_data[15: 8]};
-          2'b10: load_data_comb = {24'b0, mem_data[23:16]};
-          2'b11: load_data_comb = {24'b0, mem_data[31:24]};
-          default: load_data_comb = 32'bx;
-        endcase
-      6'b100001: // lh - Load Halfword (Signed)
-        case (addr_offset)
-          2'b00: load_data_comb = {{16{mem_data[15]}}, mem_data[15: 0]};
-          2'b10: load_data_comb = {{16{mem_data[31]}}, mem_data[31:16]};
-          default: load_data_comb = 32'bx; // Alignment error
-        endcase
-      6'b100101: // lhu - Load Halfword Unsigned
-        case (addr_offset)
-          2'b00: load_data_comb = {16'b0, mem_data[15: 0]};
-          2'b10: load_data_comb = {16'b0, mem_data[31:16]};
-          default: load_data_comb = 32'bx; // Alignment error
-        endcase
-      6'b100011: // lw - Load Word
-        if (addr_0) load_data_comb = mem_data;
-        else load_data_comb = 32'bx; // Alignment error
-      6'b100010: // lwl - Load Word Left
-        case (addr_offset)
-          // Merge read data (left part) with existing register data (right part)
-          2'b00: load_data_comb = {mem_data[ 7: 0], rf_rdata2[23: 0]}; // Load 1 byte (MSB)
-          2'b01: load_data_comb = {mem_data[15: 0], rf_rdata2[15: 0]}; // Load 2 bytes
-          2'b10: load_data_comb = {mem_data[23: 0], rf_rdata2[ 7: 0]}; // Load 3 bytes
-          2'b11: load_data_comb = mem_data;                           // Load 4 bytes (like LW)
-          default: load_data_comb = 32'bx;
-        endcase
-      6'b100110: // lwr - Load Word Right
-        case (addr_offset)
-          // Merge read data (right part) with existing register data (left part)
-          2'b00: load_data_comb = mem_data;                           // Load 4 bytes (like LW)
-          2'b01: load_data_comb = {rf_rdata2[31:24], mem_data[31: 8]}; // Load 3 bytes
-          2'b10: load_data_comb = {rf_rdata2[31:16], mem_data[31:16]}; // Load 2 bytes
-          2'b11: load_data_comb = {rf_rdata2[31: 8], mem_data[31:24]}; // Load 1 byte (LSB)
-          default: load_data_comb = 32'bx;
-        endcase
-      default: load_data_comb = 32'b0; // Default for non-load instructions
-    endcase
-  end
-  assign load_data = load_data_comb;
+  assign load_data = (lb | lbu) ?  // Load Byte (Signed or Unsigned) (Load 部分保持不变)
+      (addr_0 ? {{24{(lb & mem_data [ 7])}}, mem_data [ 7: 0]} :
+       addr_1 ? {{24{(lb & mem_data [15])}}, mem_data [15: 8]} :
+       addr_2 ? {{24{(lb & mem_data [23])}}, mem_data [23:16]} :
+                {{24{(lb & mem_data [31])}}, mem_data [31:24]} ) :
+
+    (lh | lhu) ?  // Load Halfword (Signed or Unsigned)
+      (addr_0 ? {{16{(lh & mem_data [15])}}, mem_data [15: 0]} :
+       addr_2 ? {{16{(lh & mem_data [31])}}, mem_data [31:16]} :
+                32'b0 ) : // Should not happen for properly aligned halfword load
+
+      lw ? mem_data :  // Load Word
+      lwl ?  // Load Word Left
+      (addr_0 ? {mem_data [ 7: 0], rf_rdata2 [23: 0]} :
+       addr_1 ? {mem_data [15: 0], rf_rdata2 [15: 0]} :
+       addr_2 ? {mem_data [23: 0], rf_rdata2 [ 7: 0]} :
+                mem_data ) :
+    lwr ?             // Load Word Right
+      (addr_0 ? mem_data :
+       addr_1 ? {rf_rdata2 [31:24], mem_data [31: 8]} :
+      addr_2 ? {rf_rdata2 [31:16], mem_data [31:16]} :
+                {rf_rdata2 [31: 8], mem_data [31:24]} ) :
+    32'b0; // Default case, should not be reached
 
 endmodule
 
