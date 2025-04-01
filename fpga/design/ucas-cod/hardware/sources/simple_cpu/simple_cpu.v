@@ -695,23 +695,23 @@ module load_and_store_controller (
        addr_2 ? {{24{(lb & mem_data [23])}}, mem_data [23:16]} :
                 {{24{(lb & mem_data [31])}}, mem_data [31:24]} ) :
 
-    (lh | lhu) ?  // Load Halfword (Signed or Unsigned)
-      (addr_0 ? {{16{(lh & mem_data [15])}}, mem_data [15: 0]} :
+      (lh | lhu) ?  // Load Halfword (Signed or Unsigned)
+       (addr_0 ? {{16{(lh & mem_data [15])}}, mem_data [15: 0]} :
        addr_2 ? {{16{(lh & mem_data [31])}}, mem_data [31:16]} :
                 32'b0 ) : // Should not happen for properly aligned halfword load
 
       lw ? mem_data :  // Load Word
-      lwl ?  // Load Word Left
-      (addr_0 ? {mem_data [ 7: 0], rf_rdata2 [23: 0]} :
+       lwl ?  // Load Word Left
+       (addr_0 ? {mem_data [ 7: 0], rf_rdata2 [23: 0]} :
        addr_1 ? {mem_data [15: 0], rf_rdata2 [15: 0]} :
        addr_2 ? {mem_data [23: 0], rf_rdata2 [ 7: 0]} :
                 mem_data ) :
-    lwr ?             // Load Word Right
-      (addr_0 ? mem_data :
+      lwr ?             // Load Word Right
+       (addr_0 ? mem_data :
        addr_1 ? {rf_rdata2 [31:24], mem_data [31: 8]} :
-      addr_2 ? {rf_rdata2 [31:16], mem_data [31:16]} :
+       addr_2 ? {rf_rdata2 [31:16], mem_data [31:16]} :
                 {rf_rdata2 [31: 8], mem_data [31:24]} ) :
-    32'b0; // Default case, should not be reached
+      32'b0; // Default case, should not be reached
 
 endmodule
 
@@ -901,6 +901,3 @@ module mem_to_reg (
                       32'b0;                                 // Default: 0 (should not be reached for writing instructions)
 
 endmodule
-
-// Note: The ALU and Shifter modules are assumed to be provided elsewhere and are instantiated in simple_cpu.
-// Note: The RegFile module is assumed to be provided elsewhere and is instantiated in simple_cpu.
