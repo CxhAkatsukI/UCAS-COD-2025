@@ -312,10 +312,16 @@ module control_unit (
 );
   // reg_dst: Select destination register based on instruction type
   // R-type (opcode=0) uses rd, JAL uses $ra (31), others use rt
-  assign reg_dst = (opcode == 6'b000000) ? 2'b11 : // R-type (use rd)
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  /*
+  assign reg_dst = (~|opcode) ? 2'b11 : // R-type (use rd)
                  (opcode == 6'b000011) ? 2'b10 : // JAL (use $ra)
                  (opcode == 6'b000010) ? 2'b00 : // J (no write) - Covered by reg_write_cond anyway
                  2'b01;                          // I-type/Loads (use rt)
+  */
+  // --- New Approach: Direct Logic Formula based on Opcode Bits ---
+  assign reg_dst = { (~|opcode || (opcode[1] && ~|opcode[5:2])),
+                     (~|opcode || |opcode[5:2]) };
 
   // is_branch: Detect branch instructions (BEQ, BNE, BLEZ, BGTZ, BLTZ, BGEZ)
   wire is_branch_sub = (opcode[5:2] == 4'b0001) ? 1'b1 : 1'b0; // BEQ, BNE, BLEZ, BGTZ
@@ -333,17 +339,27 @@ module control_unit (
   assign reg_write_cond = (opcode[5:3] != 3'b101 && !is_branch); // Not Store and not Branch
 
   // alu_src_imm: Select immediate value as ALU source 2 for I-type arithmetic, Loads, Stores
-  assign alu_src_imm = (opcode[5:3] == 3'b001 || opcode[5:3] == 3'b100 || opcode[5:3] == 3'b101);
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  // assign alu_src_imm = (opcode[5:3] == 3'b001 || opcode[5:3] == 3'b100 || opcode[5:3] == 3'b101);
+  assign alu_src_imm = ((opcode[5] || opcode[3]) && !opcode[4]);
 
   // is_jump: Detect J and JAL instructions
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  /*
   assign is_jump = (opcode == 6'b000010) ? 2'b01 : // J
                    (opcode == 6'b000011) ? 2'b10 : // JAL
                    2'b00;                         // Not J or JAL
+  */
+  // --- New Approach: Direct Logic Formula based on Opcode Bits ---
+  assign is_jump = (~|opcode[5:2] && opcode[1]);
 
   // alu_op_ok & alu_op_cond: Provide ALU operation hint for non-R-type instructions
-  wire imm_arithmetic = (opcode[5:3] == 3'b001 && opcode != 6'b001111); // I-type Arith/Logic (ADDIU, SLTI, SLTIU, ANDI, ORI, XORI), excludes LUI
-  wire is_load_store  = (opcode[5:3] == 3'b100 || opcode[5:3] == 3'b101); // Load or Store
+  wire imm_arithmetic = (opcode[5:3] == 3'b001 && ~&opcode[2:0]); // I-type Arith/Logic (ADDIU, SLTI, SLTIU, ANDI, ORI, XORI), excludes LUI
+  //wire is_load_store  = (opcode[5:3] == 3'b100 || opcode[5:3] == 3'b101); // Load or Store
+  wire is_load_store = (opcode[5]);
 
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  /*
   // Decode I-type arithmetic operations for alu_op_cond
   wire addiu = (opcode == 6'b001001);
   wire slti  = (opcode == 6'b001010);
@@ -359,6 +375,12 @@ module control_unit (
                           ori   ? 3'b001 : // OR
                           xori  ? 3'b100 : // XOR
                           3'bxxx;          // Should not happen for imm_arithmetic
+  */
+  // --- New Approach: Direct Logic Formula based on Opcode Bits ---
+  wire [2:0] arith_type;
+  assign arith_type[0] = (~opcode[2] & opcode[1]) | (opcode[2] & opcode[0]);
+  assign arith_type[1] = ~opcode[2];
+  assign arith_type[2] = opcode[1] & ~opcode[0];
 
   // Determine alu_op_cond based on instruction type
   // Used by ALUOp Generator if alu_op_ok is true.
@@ -391,8 +413,7 @@ module reg_write_controller (
 );
   // Detect instructions that never write or have special write conditions
   wire j   = (opcode == 6'b000010);                  // J (never writes)
-  wire jal = (opcode == 6'b000011);                  // JAL (writes to $ra)
-  wire jr  = (opcode == 6'b000000 && funct == 6'b001000); // JR (never writes)
+  wire jr  = (~|opcode && funct == 6'b001000);       // JR (never writes)
 
   // reg_write: Intermediate write enable. True if precondition met AND not J or JR.
   // JAL is handled by precondition=1, reg_dst_input=10.
@@ -429,12 +450,14 @@ module arithmetic_controller (
 );
 
   // R-type ALU operations (funct[5] == 1) or I-type immediate arithmetic
-  assign is_alu_operation = ((opcode == 6'b000000 && funct[5] == 1'b1) || // R-type Arith/Logic
-                             (opcode[5:3] == 3'b001 && opcode != 6'b001111)); // I-type Arith/Logic (excl LUI)
+  assign is_alu_operation = ((~|opcode && funct[5] == 1'b1) || // R-type Arith/Logic
+                             (opcode[5:3] == 3'b001 && ~&opcode[2:0])); // I-type Arith/Logic (excl LUI)
 
   // R-type Shift operations (funct[5:3] == 000)
-  assign is_shift_operation = (opcode == 6'b000000 && funct[5:3] == 3'b000);
+  assign is_shift_operation = (~|opcode && funct[5:3] == 3'b000);
 
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  /*
   // -- Decode R-type ALU operations --
   wire addu = (funct == 6'b100001); // ADDU
   wire subu = (funct == 6'b100011); // SUBU
@@ -454,14 +477,22 @@ module arithmetic_controller (
                                slt  ? 3'b111 : // SLT
                                sltu ? 3'b011 : // SLTU
                                3'bxxx;         // Default / Other R-type
+  */
+  // --- New Approach: Direct Logic Formula based on Funct Bits ---
+  wire [2:0] r_type_arith_op;
+  assign r_type_arith_op[0] = (funct[3] & funct[1]) | (~funct[3] & funct[2] & funct[0]);
+  assign r_type_arith_op[1] = funct[3] | ~funct[2];
+  assign r_type_arith_op[2] = (funct[3] & ~funct[0]) | (~funct[3] & funct[1]);
 
   // alu_op: Final ALU operation code
   // Priority: R-type decoded funct, then I-type decoded opcode, else default.
-  assign alu_op = is_alu_operation ? ( (opcode == 6'b000000) ? r_type_arith_op : // R-type
+  assign alu_op = is_alu_operation ? ( (~|opcode) ? r_type_arith_op :             // R-type
                                        alu_op_input                               // I-type (use hint from Control)
                                      )
                                    : 3'b000; // Default to ADD if not an ALU op (e.g., for address calc pass-through)
 
+  // --- Original Approach: Intermediate Wires and Ternary Operator ---
+  /*
   // -- Decode R-type Shift operations --
   wire sll  = (funct == 6'b000000); // SLL
   wire srl  = (funct == 6'b000010); // SRL
@@ -477,12 +508,18 @@ module arithmetic_controller (
                           srlv ? 2'b10 : // Logical Right
                           srav ? 2'b11 : // Arithmetic Right
                           2'bxx;         // Default / Not a shift
+  */
+  // --- New Approach: Direct Logic Formula based on Funct Bits ---
+  wire [1:0] shift_type;
+  assign shift_type[0] = funct[1] & funct[0];
+  assign shift_type[1] = funct[1];
 
   // shifter_op: Final Shifter operation code
   assign shifter_op = is_shift_operation ? shift_type : 2'b00; // Default if not a shift op
 
   // is_shamt: Indicates if the shift amount comes from the shamt field (SLL, SRL, SRA)
-  assign is_shamt = is_shift_operation && (sll || srl || sra);
+  // assign is_shamt = is_shift_operation && (sll || srl || sra);
+  assign is_shamt = is_shift_operation && ~funct[2];
 
 endmodule
 
@@ -499,9 +536,9 @@ module branch_controller (
 );
   // is_zero_cmp: True for BLEZ, BGTZ (opcode check) and BLTZ, BGEZ (REGIMM opcode check)
   assign is_zero_cmp = is_branch &&
-                       (opcode == 6'b000110 || // BLEZ
-                        opcode == 6'b000111 || // BGTZ
-                        opcode == 6'b000001);  // REGIMM (includes BLTZ, BGEZ)
+                       (opcode[2:0] == 3'b110 || // BLEZ
+                        opcode[2:0] == 3'b111 || // BGTZ
+                        opcode[2:0] == 3'b001);  // REGIMM (includes BLTZ, BGEZ)
 endmodule
 
 
@@ -511,27 +548,28 @@ endmodule
 //              type (increment, branch, jump) and conditions.
 //==============================================================================
 module pc_controller (
-    input is_branch,  // 1 means branch
-    input [31:0] current_pc,
-    input [31:0] rs,  // this is the rs from register file, we will use this to determine
-                      // the next pc in jr instruction
-    input [31:0] alu_result,  // this is the result from ALU, we will use this to determine
-                              // whether to branch or not
-    input alu_zero,  // this is the zero flag from ALU, we will use this to determine
-                     // whether to branch or not in beq instruction
-    input [31:0] instruction,  // the instruction to be executed
-    output is_jump,  // if it is a jump instruction
-    output [31:0] next_pc,  // the next pc to be sent to the PC module
-    output [31:0] pc_store  // pc + 8, to be stored in the PC module
+    input is_branch,          // Input: Branch signal (1 = branch)
+    input [31:0] current_pc,  // Input: Current PC
+    input [31:0] rs,          // Input: Register rs value (for JR)
+    input [31:0] alu_result,  // Input: ALU result (for branch compare)
+    input alu_zero,           // Input: ALU zero flag (for BEQ, BNE)
+    input [31:0] instruction, // Input: Instruction
+    output is_jump,           // Output: Jump instruction signal
+    output [31:0] next_pc,    // Output: Next PC value
+    output [31:0] pc_store    // Output: PC + 8 (for PC update)
 );
+
   wire [5:0] opcode = instruction[31:26];
   wire [4:0] funct_branch = instruction[20:16];
-  wire beq = (opcode == 6'b000100) ? 1'b1 : 1'b0;  // branch if equal
-  wire bne = (opcode == 6'b000101) ? 1'b1 : 1'b0;  // branch if not equal
-  wire blez = (opcode == 6'b000110) ? 1'b1 : 1'b0;  // branch if less than or equal to zero
-  wire bgtz = (opcode == 6'b000111) ? 1'b1 : 1'b0;  // branch if greater than zero
-  wire bltz = (opcode == 6'b000001 && funct_branch == 5'b00000) ? 1'b1 : 1'b0;  // branch if less than zero
-  wire bgez = (opcode == 6'b000001 && funct_branch == 5'b00001) ? 1'b1 : 1'b0;  // branch if greater than or equal to zero
+
+  // --- Original Approach: generate the branch_condition_satisfied signal ---
+  /*
+  wire beq = (opcode[2:0] == 3'b100) ? 1'b1 : 1'b0;                              // branch if equal
+  wire bne = (opcode[2:0] == 3'b101) ? 1'b1 : 1'b0;                              // branch if not equal
+  wire blez = (opcode[2:0] == 3'b110) ? 1'b1 : 1'b0;                             // branch if less than or equal to zero
+  wire bgtz = (opcode[2:0] == 3'b111) ? 1'b1 : 1'b0;                             // branch if greater than zero
+  wire bltz = (opcode[2:0] == 3'b001 && funct_branch[0] == 1'b0) ? 1'b1 : 1'b0;  // branch if less than zero
+  wire bgez = (opcode[2:0] == 3'b001 && funct_branch[0] == 1'b1) ? 1'b1 : 1'b0;  // branch if greater than or equal to zero
 
   wire branch_condition_satisfied = (beq && alu_zero) ||
                              (bne && !alu_zero) ||
@@ -539,20 +577,36 @@ module pc_controller (
                              (bgtz && (alu_result[31] == 0 && alu_zero != 1)) ||
                              (bltz && (alu_result == 1)) ||
                              (bgez && (alu_result == 0));  // check if the branch condition is satisfied
+  */
+
+  // --- New Approach: generate the branch_condition_satisfied signal ---
+  // branch_condition_satisfied: True if branch condition is satisfied
+  wire branch_condition_satisfied = (!opcode[2] && (funct_branch[0] ^ alu_result)) ||
+                                    (opcode[1] && (opcode[0] ^ (alu_result[31] || alu_zero))) ||
+                                    ((opcode[2] ^ opcode[1]) && (opcode[0] ^ alu_zero));
 
   wire [15:0] imm_B = instruction[15:0];
   wire [31:0] imm_B_ext = {{16{imm_B[15]}}, imm_B};  // sign extend the immediate value
   wire [31:0] next_pc_branch = (branch_condition_satisfied) ? (current_pc + 4) + {imm_B_ext[29:0], 2'b00} : current_pc + 4;  // if branch condition is satisfied, we will branch to the target address
 
+  // --- Original Approach: generate the funct_jump signal ---
+  /*
   wire [5:0] funct_jump = instruction[5:0];
-  wire j = (opcode == 6'b000010) ? 1'b1 : 1'b0;  // jump instruction
-  wire jal = (opcode == 6'b000011) ? 1'b1 : 1'b0;  // jump and link instruction
-  wire jr = (opcode == 6'b000000 && funct_jump == 6'b001000) ? 1'b1 : 1'b0;  // jump register instruction
-  wire jalr = (opcode == 6'b000000 && funct_jump == 6'b001001) ? 1'b1 : 1'b0;  // jump and link register instruction
-  assign is_jump = j || jal || jr || jalr;  // if it is a jump instruction
+  wire j = (opcode == 6'b000010) ? 1'b1 : 1'b0;                     // jump instruction
+  wire jal = (opcode == 6'b000011) ? 1'b1 : 1'b0;                   // jump and link instruction
+  wire jr = (~|opcode && funct_jump == 6'b001000) ? 1'b1 : 1'b0;    // jump register instruction
+  wire jalr = (~|opcode && funct_jump == 6'b001001) ? 1'b1 : 1'b0;  // jump and link register instruction
+  assign is_jump = j || jal || jr || jalr;                          // if it is a jump instruction
+  */
+
+  // --- New Implementation: Direct Logic Formula based on Opcode and Funct Bits ---
+  // is_jump: True for J, JAL, JR, JALR instructions
+  wire [5:0] funct_jump = instruction[5:0];
+  assign is_jump = (~|opcode && funct_jump[3] == 1'b1 && funct_jump[1] == 1'b0) ||
+                 (~|opcode[5:2] && opcode[1] == 1'b1);
 
   wire [25:0] imm_J = instruction[25:0];
-  wire [31:0] next_pc_jump = (!jr && !jalr) ? {current_pc[31:28], imm_J, 2'b00} : rs;  // if jr or jalr, we will use rs as the next pc
+  wire [31:0] next_pc_jump = (|opcode) ? {current_pc[31:28], imm_J, 2'b00} : rs;  // if jr or jalr, we will use rs as the next pc
   assign next_pc = (is_jump) ? next_pc_jump :
                  (is_branch) ? next_pc_branch :
                  current_pc + 4;  // if it is a jump, we will use next_pc_jump, if it is a branch, we will use next_pc_branch, otherwise, we will just increment the current pc by 4
@@ -605,22 +659,27 @@ module load_and_store_controller (
 );
   // -- Opcode Decoding --
   // Load instructions
-  wire lb  = (opcode == 6'b100000); // Load Byte
-  wire lbu = (opcode == 6'b100100); // Load Byte Unsigned
-  wire lh  = (opcode == 6'b100001); // Load Halfword
-  wire lhu = (opcode == 6'b100101); // Load Halfword Unsigned
-  wire lw  = (opcode == 6'b100011); // Load Word
-  wire lwl = (opcode == 6'b100010); // Load Word Left
-  wire lwr = (opcode == 6'b100110); // Load Word Right
+  wire lb  = (opcode[2:0] == 3'b000); // Load Byte
+  wire lbu = (opcode[2:0] == 3'b100); // Load Byte Unsigned
+  wire lh  = (opcode[2:0] == 3'b001); // Load Halfword
+  wire lhu = (opcode[2:0] == 3'b101); // Load Halfword Unsigned
+  wire lw  = (opcode[2:0] == 3'b011); // Load Word
+  wire lwl = (opcode[2:0] == 3'b010); // Load Word Left
+  wire lwr = (opcode[2:0] == 3'b110); // Load Word Right
 
   // Store instructions
-  wire sb  = (opcode == 6'b101000); // Store Byte
-  wire sh  = (opcode == 6'b101001); // Store Halfword
-  wire sw  = (opcode == 6'b101011); // Store Word
-  wire swl = (opcode == 6'b101010); // Store Word Left
-  wire swr = (opcode == 6'b101110); // Store Word Right
+  wire sb  = (opcode[2:0] == 3'b000); // Store Byte
+  wire sh  = (opcode[2:0] == 3'b001); // Store Halfword
+  wire sw  = (opcode[2:0] == 3'b011); // Store Word
+  wire swl = (opcode[2:0] == 3'b010); // Store Word Left
+  wire swr = (opcode[2:0] == 3'b110); // Store Word Right
 
-  // -- Type Grouping --
+  // Load and Store flags
+  wire is_load = (opcode[5:3] == 3'b100); // Load instructions
+  wire is_store = (opcode[5:3] == 3'b101); // Store instructions
+
+  // -- Type Grouping, not used in this module --
+  /*
   wire type_load    = lb | lbu | lh | lhu | lw | lwl | lwr; // Any Load instruction
   wire type_store   = sb | sh | sw | swl | swr;           // Any Store instruction
   wire type_mem_b   = lb | lbu | sb;                      // Byte access
@@ -628,6 +687,7 @@ module load_and_store_controller (
   wire type_mem_w   = lw | sw;                            // Aligned Word access
   wire type_mem_wl  = lwl | swl;                          // Word Left access
   wire type_mem_wr  = lwr | swr;                          // Word Right access
+  */
 
   // -- Address Alignment and Offset --
   wire [ 1:0] addr_offset = mem_addr[1:0]; // Byte offset within the word (0, 1, 2, 3)
@@ -642,7 +702,7 @@ module load_and_store_controller (
   // -- Byte Strobe Calculation (mem_strb) --
   // Determine which byte lanes are active for a write operation
   assign mem_strb =
-        ({4{sb}} & ( // Store Byte
+        (({4{sb}} & ( // Store Byte
             (addr_0 ? 4'b0001 : 0) | (addr_1 ? 4'b0010 : 0) |
             (addr_2 ? 4'b0100 : 0) | (addr_3 ? 4'b1000 : 0)
         )) |
@@ -660,12 +720,12 @@ module load_and_store_controller (
         ({4{swr}} & ( // Store Word Right
             (addr_0 ? 4'b1111 : 0) | (addr_1 ? 4'b1110 : 0) |
             (addr_2 ? 4'b1100 : 0) | (addr_3 ? 4'b1000 : 0)
-        ));
+        ))) & {4{is_store}}; // Only if store operation
 
   // -- Memory Write Data Formatting (mem_wdata) --
   // Prepare the 32-bit data word to be written based on the store type and alignment
   assign mem_wdata =
-        ({32{sb}} & ( // Store Byte: Replicate byte across all lanes (strobe selects)
+        (({32{sb}} & ( // Store Byte: Replicate byte across all lanes (strobe selects)
             {4{rf_rdata2[7:0]}}
         )) |
         ({32{sh}} & ( // Store Halfword: Replicate halfword across lanes
@@ -685,11 +745,11 @@ module load_and_store_controller (
              addr_1 ? {rf_rdata2[23:0],  8'b0} :            // Write lower 3 bytes
              addr_2 ? {rf_rdata2[15:0], 16'b0} :            // Write lower 2 bytes
                       {rf_rdata2[ 7:0], 24'b0})             // Write LSB
-        ));
+        ))) & {32{is_store}}; // Only if store operation
 
 
   // -- Load Data Processing (load_data) --
-  assign load_data = (lb | lbu) ?  // Load Byte (Signed or Unsigned) (Load 部分保持不变)
+  assign load_data = ((lb | lbu) ?  // Load Byte (Signed or Unsigned) (Load 部分保持不变)
       (addr_0 ? {{24{(lb & mem_data [ 7])}}, mem_data [ 7: 0]} :
        addr_1 ? {{24{(lb & mem_data [15])}}, mem_data [15: 8]} :
        addr_2 ? {{24{(lb & mem_data [23])}}, mem_data [23:16]} :
@@ -711,7 +771,7 @@ module load_and_store_controller (
        addr_1 ? {rf_rdata2 [31:24], mem_data [31: 8]} :
        addr_2 ? {rf_rdata2 [31:16], mem_data [31:16]} :
                 {rf_rdata2 [31: 8], mem_data [31:24]} ) :
-      32'b0; // Default case, should not be reached
+      32'b0) & {32{is_load}}; // Default case, should not be reached
 
 endmodule
 
@@ -729,16 +789,22 @@ module move_and_load_imm_alu_controller (
     output [ 2:0] move_alu_op  // Output: ALU operation for MOVZ/MOVN (typically OR/ADD with zero)
 );
   // Detect conditional move instructions (R-type)
-  wire movn = (opcode == 6'b000000 && funct == 6'b001011); // Move if Not Zero (rt != 0)
-  wire movz = (opcode == 6'b000000 && funct == 6'b001010); // Move if Zero (rt == 0)
+  // --- Original Implementation ---
+  /*
+  wire movn = (~|opcode && funct == 6'b001011); // Move if Not Zero (rt != 0)
+  wire movz = (~|opcode && funct == 6'b001010); // Move if Zero (rt == 0)
   assign is_move = movn || movz;
+  */
+
+  // --- New Implementation: Direct Logic Formula based on Funct Bits ---
+  assign is_move = (~|opcode && funct[1] && funct[3] && !funct[5]);
 
   // Define the ALU operation used to effectively pass 'rs' through for MOVZ/MOVN.
   // Using OR with 0 (alu_src1) achieves this: Result = 0 | rs = rs. ADD also works: Result = 0 + rs = rs.
   assign move_alu_op = 3'b001; // OR operation (could also be ADD 3'b010)
 
   // Detect Load Upper Immediate instruction (I-type)
-  assign is_lui = (opcode == 6'b001111); // LUI
+  assign is_lui = (&opcode[3:0]); // LUI
 
 endmodule
 
@@ -756,16 +822,21 @@ module reg_write_signal_generator (
     output      wen              // Output: Final Write Enable signal to Register File
 );
   // Detect conditional move instructions
-  wire movn = (opcode == 6'b000000 && funct == 6'b001011); // Move if Not Zero (rt != 0) -> is_zero should be 0
-  wire movz = (opcode == 6'b000000 && funct == 6'b001010); // Move if Zero (rt == 0) -> is_zero should be 1
+  wire is_move = (~|opcode && funct[1] && funct[3] && !funct[5]);
 
   // Final write enable logic:
   // Normal write: reg_write_input is true AND it's not a conditional move.
   // MOVN write: Instruction is MOVN AND the condition (rt != 0 -> !is_zero) is met.
   // MOVZ write: Instruction is MOVZ AND the condition (rt == 0 -> is_zero) is met.
+  // --- Original Implementation ---
+  /*
   assign wen = (reg_write_input && !movn && !movz) || // Normal write condition
                (movn && !is_zero) ||                  // MOVN condition met
                (movz && is_zero);                     // MOVZ condition met
+  */
+  // --- New Implementation: Direct Logic Formula ---
+  assign wen = (reg_write_input && !is_move) ||   // Normal write condition
+               (is_move && (funct[0] ^ is_zero)); // MOVN/MOVZ condition met
 endmodule
 
 
@@ -791,6 +862,8 @@ module alu_src_selector (
   wire [31:0] imm_0E = {16'b0, imm_16};            // Zero-extended immediate
 
   // Detect immediate logical operations that require zero extension
+  // --- Original Implementation ---
+  /*
   wire andi = (opcode == 6'b001100);
   wire ori  = (opcode == 6'b001101);
   wire xori = (opcode == 6'b001110);
@@ -798,6 +871,10 @@ module alu_src_selector (
   // but the ALU performs signed subtraction/comparison. The standard requires sign extension for SLTIU's immediate operand fed to the ALU.
   // Sticking to explicit ANDI/ORI/XORI for zero extension selection.
   wire use_zero_extend = andi || ori || xori;
+  */
+
+  // --- New Implementation: Direct Logic Formula based on Opcode Bits ---
+  wire use_zero_extend = (!opcode[5] && opcode[2]);
 
   // Select ALU Source 2 (Operand B)
   assign alu_src2 = (is_branch && is_branch_zero_cmp) ? 32'b0 : // For BLEZ, BGTZ etc., compare rs with 0
@@ -805,9 +882,7 @@ module alu_src_selector (
                     rt; // Default: Use data from register rt
 
   // Detect conditional moves for Source 1 modification
-  wire movn = (opcode == 6'b000000 && funct == 6'b001011); // Move if Not Zero
-  wire movz = (opcode == 6'b000000 && funct == 6'b001010); // Move if Zero
-  wire is_move = movn || movz;
+  wire is_move = (~|opcode && funct[1] && funct[3] && !funct[5]);
 
   // Select ALU Source 1 (Operand A)
   // For MOVZ/MOVN, use 0 as source 1, ALU performs 0 OR rs to pass rs through.
