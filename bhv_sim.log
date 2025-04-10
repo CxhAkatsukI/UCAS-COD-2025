@@ -1,7 +1,9 @@
 WARNING: fpga/design/ucas-cod/hardware/sim/../sources/../wrapper/simple_cpu/ideal_mem.v:41: $readmemh: The behaviour for reg[...] mem[N:0]; $readmemh("...", mem); changed in the 1364-2005 standard. To avoid ambiguity, use mem[0:N] or explicit range parameters $readmemh("...", mem, start, stop);. Defaulting to 1364-2005 behavior.
-WARNING: fpga/design/ucas-cod/hardware/sim/../sources/../wrapper/simple_cpu/ideal_mem.v:41: $readmemh(software/workload/ucas-cod/benchmark/simple_test/advanced/mips/sim/unalign.mem): Not enough words in the file for the requested range [0:1023].
+WARNING: fpga/design/ucas-cod/hardware/sim/../sources/../wrapper/simple_cpu/ideal_mem.v:41: $readmemh(software/workload/ucas-cod/benchmark/simple_test/advanced/mips/sim/to-lower-case.mem): Not enough words in the file for the requested range [0:1023].
+WARNING: fpga/design/ucas-cod/hardware/sim/../sources/../wrapper/simple_cpu/ideal_mem.v:41: $readmemh: The behaviour for reg[...] mem[N:0]; $readmemh("...", mem); changed in the 1364-2005 standard. To avoid ambiguity, use mem[0:N] or explicit range parameters $readmemh("...", mem, start, stop);. Defaulting to 1364-2005 behavior.
+WARNING: fpga/design/ucas-cod/hardware/sim/../sources/../wrapper/simple_cpu/ideal_mem.v:41: $readmemh(software/workload/ucas-cod/benchmark/simple_test/advanced/mips/sim/to-lower-case.mem): Not enough words in the file for the requested range [0:1023].
 FST info: dumpfile fpga/sim_out/simple_cpu/dump.fst opened for output.
 =================================================
-INFO: comparing trace finish, PASS!
+Benchmark simulation passed!!!
 =================================================
-fpga/design/ucas-cod/hardware/sim/simple_cpu/single_cycle/simple_cpu_test.v:102: $finish called at 610 (1ns)
+fpga/design/ucas-cod/hardware/sim/simple_cpu/multi_cycle/simple_cpu_test.v:182: $finish called at 84875000 (1ps)
