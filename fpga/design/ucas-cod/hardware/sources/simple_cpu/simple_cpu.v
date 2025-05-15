@@ -47,8 +47,8 @@ module simple_cpu (
   wire [31:0] imm_B_ext;            // Sign-extended branch immediate
   wire [31:0] lui_result;           // Result for LUI instruction
   wire        use_zero_extend;      // Control for immediate extension type
-  reg  [ 4:0] current_state;        // Current state of the FSM
-  reg  [ 4:0] next_state;           // Next state of the FSM
+  reg  [ 8:0] current_state;        // Current state of the FSM
+  reg  [ 8:0] next_state;           // Next state of the FSM
   reg  [31:0] IR;                   // Instruction Register (holds current instruction)
 
   wire        reg_dst_input;          // Selects destination register (rd/rt/ra hint)
@@ -97,7 +97,7 @@ module simple_cpu (
   wire [31:0] shifter_src2;           // Second Shifter operand (shift amount)
   wire [ 2:0] alu_op_final;           // Final ALU operation control to ALU
   wire        alu_zero;               // ALU Zero flag
-  reg  [31:0] alu_result;             // ALU computation result
+  wire [31:0] alu_result;             // ALU computation result
   reg  [31:0] shift_result;           // Shifter result
 
   //-- Signals from Memory Path (Generated in MEM) --
@@ -108,17 +108,24 @@ module simple_cpu (
   wire [ 4:0] RF_waddr;               // Write address to RegFile
   reg  [31:0] RF_wdata;               // Write data to RegFile
 
+  wire [69:0] inst_retire;
+
+  assign inst_retire = {RF_wen, RF_waddr, RF_wdata, current_pc}; // Assigning the inst_retire signal with the required information
 
   //============================================================================
   // PIPELINE STAGE 0: FSM Implementation
   //============================================================================
 
-  // -- FSM State Definitions --
-  localparam IF = 5'b00001,
-             ID = 5'b00010,
-             EX = 5'b00100,
-             MEM = 5'b01000,
-             WB = 5'b10000;
+// -- FSM State Definitions --
+localparam INIT = 9'b000000001, // Initial State
+           IF   = 9'b000000010, // Instruction Fetch
+           IW   = 9'b000000100, // Instruction Wait
+           ID   = 9'b000001000, // Instruction Decode
+           EX   = 9'b000010000, // Execute
+           ST   = 9'b000100000, // Store - Memory Write
+           MEM  = 9'b001000000, // Load - Memory Read
+           RDW  = 9'b010000000, // Read Data Wait
+           WB   = 9'b100000000; // Write Back
 
   // -- FSM State Register --
   always @(posedge clk) begin
@@ -166,8 +173,8 @@ module simple_cpu (
   end
 
   // -- FSM Output Logic --
-  assign IRWrite = current_state[0];
-  assign Regwrite_fsm = current_state[4];
+  assign IRWrite = current_state[1];
+  assign Regwrite_fsm = current_state[8];
 
   // -- Instruction Register Logic --
   always @(posedge clk) begin
@@ -223,8 +230,8 @@ module simple_cpu (
   wire        is_branch_slt     = (opcode == 6'b000001);                       // Branches that use slt as alu_op
   assign      is_branch         = (is_branch_sub || is_branch_slt);            // General branch flag
   assign      reg_dst_input     = opcode[5] ^ opcode[3];                       // Hint for WB Stage dest reg sel
-  assign      mem_read_internal = current_state[3] && (opcode[5:3] == 3'b100); // Control for MEM Stage
-  assign      mem_write_internal= current_state[3] && (opcode[5:3] == 3'b101); // Control for MEM Stage
+  assign      mem_read_internal = current_state[6] && (opcode[5:3] == 3'b100); // Control for MEM Stage
+  assign      mem_write_internal= current_state[6] && (opcode[5:3] == 3'b101); // Control for MEM Stage
   assign      alu_src_imm_input = ((opcode[5] || opcode[3]) && !opcode[4]);    // Control for EX Stage (ALU Src Sel)
 
   //-- Secondary Control Signal Generation (Purely from Instruction or derived ID signals) --
@@ -323,12 +330,9 @@ module simple_cpu (
       .Overflow   (),
       .CarryOut   (),
       .Zero       (alu_zero),         // Output: Zero flag -> To EX (PC Ctrl), WB
-      .Result     (alu_out)           // Output: ALU computation result -> To EX (PC Ctrl), MEM, WB
+      .Result     (alu_result)           // Output: ALU computation result -> To EX (PC Ctrl), MEM, WB
   );
 
-  always @(posedge clk) begin
-      alu_result <= alu_out;          // Store ALU result for MEM stage
-  end
 
   //-- Shifter Execution --
   wire [31:0] shifter_out;                // Shifter computation result
@@ -494,3 +498,4 @@ module pc (
     end
   end
 endmodule
+

@@ -6,4 +6,4 @@ FST info: dumpfile fpga/sim_out/simple_cpu/dump.fst opened for output.
 =================================================
 Benchmark simulation passed!!!
 =================================================
-fpga/design/ucas-cod/hardware/sim/simple_cpu/multi_cycle/simple_cpu_test.v:182: $finish called at 12475000 (1ps)
+fpga/design/ucas-cod/hardware/sim/simple_cpu/multi_cycle/simple_cpu_test.v:189: $finish called at 12475000 (1ps)
