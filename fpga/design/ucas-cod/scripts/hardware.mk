@@ -34,7 +34,7 @@ VERILATOR_PATH := $(shell pwd)/fpga/sim_out/verilator
 $(SIM_OBJ_LOC)/$(SIM_TARGET): $(SIM_SRCS) $(ARCH_OPTION_TCL)
 	@mkdir -p $(SIM_OBJ_LOC)
 	if [ ! -d $(VERILATOR_PATH) ]; then \
-		git clone --depth=1 https://gitlab.agileserve.org.cn:8001/xujinsheng22/cod-verilator-bin.git $(VERILATOR_PATH); \
+		git clone --depth=1 http://8.152.206.202/ucas-cod-2021-dev/cod-verilator-bin.git $(VERILATOR_PATH); \
 		chmod -R +x $(VERILATOR_PATH)/bin; \
 	fi
 	$(VERILATOR_PATH)/bin/verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_VL)

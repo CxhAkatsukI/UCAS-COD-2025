@@ -80,6 +80,13 @@ module simple_cpu_test
     `define MEM_WSTRB_GOLDEN u_simple_cpu_golden.u_simple_cpu.Write_strb
     `define MEM_WDATA_GOLDEN u_simple_cpu_golden.u_simple_cpu.Write_data
     `define MEM_READ_GOLDEN  u_simple_cpu_golden.u_simple_cpu.MemRead
+
+    `define RF_WEN  u_simple_cpu.u_simple_cpu.RF_wen
+    `define RF_WADDR u_simple_cpu.u_simple_cpu.RF_waddr
+    `define RF_WDATA u_simple_cpu.u_simple_cpu.RF_wdata
+    `define RF_WEN_GOLDEN  u_simple_cpu_golden.u_simple_cpu.RF_wen
+    `define RF_WADDR_GOLDEN  u_simple_cpu_golden.u_simple_cpu.RF_waddr
+    `define RF_WDATA_GOLDEN  u_simple_cpu_golden.u_simple_cpu.RF_wdata
     
     `define PC        u_simple_cpu.u_simple_cpu.PC
     `define PC_GOLDEN u_simple_cpu_golden.u_simple_cpu.PC
@@ -181,6 +188,19 @@ module simple_cpu_test
 			    $display("=================================================");
 			    $finish;
 		    end
+		    
+		    else if (((`RF_WEN == 1'b1) && (`RF_WADDR != 5'h0)) || ((`RF_WEN_GOLDEN == 1'b1) && (`RF_WADDR_GOLDEN != 5'h0)))
+		    begin
+			    if (`RF_WADDR != `RF_WADDR_GOLDEN || `RF_WDATA != `RF_WDATA_GOLDEN)
+			    begin
+				    $display("=================================================");
+				    $display("ERROR: at %dns, PC = 0x%h.", $time, `PC);
+				    $display("Yours:     RF_wen = %1d, RF_waddr = 0x%h, RF_wdata = 0x%h", `RF_WEN, `RF_WADDR, `RF_WDATA);
+				    $display("Reference: RF_wen = %1d, RF_waddr = 0x%h, RF_wdata = 0x%h", `RF_WEN_GOLDEN, `RF_WADDR_GOLDEN, `RF_WDATA_GOLDEN);
+				    $display("=================================================");
+				    $finish;
+			    end
+		    end
 	    end
     end
     
@@ -194,5 +214,4 @@ module simple_cpu_test
     end
 
 endmodule
-
 
