@@ -237,18 +237,23 @@ extern int putchar(int c);
  * Return: return the actual string length that has been sent out
  *=================================================================
  */
-int puts(const char *s) {
-  // TODO: Add your driver code here
-  int i = 0;
-  while (1) {
-    if (s[i] == '\0')
-      return i;
-    while (*(uart + (UART_STATUS / sizeof(unsigned int))) & UART_TX_FIFO_FULL) {
-      ;
+int
+puts(const char *s)
+{
+    // TODO: Add your driver code here
+
+    int i;
+    volatile unsigned int *uart_tx_fifo = uart + UART_TX_FIFO/sizeof(unsigned int);
+    volatile unsigned int *uart_status = uart + UART_STATUS/sizeof(unsigned int);
+
+    for (i = 0; s[i] != '\0'; i++) {
+        /* if tx_fifo is full, loop */
+        while (*uart_status & UART_TX_FIFO_FULL)
+            ;
+        *uart_tx_fifo = (unsigned int)s[i];
     }
-    *(uart + (UART_TX_FIFO / sizeof(unsigned int))) = s[i];
-    i++;
-  }
+
+    return i;
 }
 
 int printf(const char *fmt, ...) {
