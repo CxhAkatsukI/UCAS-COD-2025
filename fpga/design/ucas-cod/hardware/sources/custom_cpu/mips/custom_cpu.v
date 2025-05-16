@@ -579,6 +579,236 @@ localparam INIT = 9'b000000001, // Initial State
   assign      MemWrite           = mem_write_internal;              // Output MemWrite signal (from ID stage control)
   assign      MemRead            = mem_read_internal;               // Output MemRead signal (from ID stage control)
 
+  //============================================================================
+  // Performance Counters
+  //============================================================================
+
+  reg [31:0] perf_cycle_count;
+  reg [31:0] perf_retired_inst_count;
+  reg [31:0] perf_retired_load_count;
+  reg [31:0] perf_retired_store_count;
+  reg [31:0] perf_branch_executed_count;
+  reg [31:0] perf_branch_taken_count;
+  reg [31:0] perf_if_stall_count;          // cnt_6
+  reg [31:0] perf_mem_access_stall_count;  // cnt_7 (LD/ST stalls on Mem_Req_Ready)
+  reg [31:0] perf_iw_stall_count;          // cnt_8
+  reg [31:0] perf_rdw_stall_count;         // cnt_9
+  reg [31:0] perf_jump_executed_count;     // cnt_10
+  reg [31:0] perf_alu_op_executed_count;   // cnt_11
+  reg [31:0] perf_shift_op_executed_count; // cnt_12
+  reg [31:0] perf_nop_in_id_count;         // cnt_13
+  reg [31:0] perf_total_mem_ops_count;     // cnt_14
+  reg [31:0] perf_reg_writes_count;        // cnt_15
+
+
+  // Logic for incrementing counters
+  wire increment_retired_inst;
+  wire increment_retired_load;
+  wire increment_retired_store;
+  wire increment_branch_executed;
+  wire increment_branch_taken;
+  wire increment_if_stall;
+  wire increment_mem_access_stall;
+  wire increment_iw_stall;
+  wire increment_rdw_stall;
+  wire increment_jump_executed;
+  wire increment_alu_op_executed;
+  wire increment_shift_op_executed;
+  wire increment_nop_in_id;
+  wire increment_total_mem_ops;
+  wire increment_reg_writes;
+
+
+  // Determine when an instruction is considered retired (Same as before)
+  assign increment_retired_inst =
+        (current_state == WB && Regwrite_fsm && !NOP && (is_alu_operation || is_shift_operation || is_lui || is_link_jump)) ||
+        (current_state == WB && Regwrite_fsm && !NOP && is_load) ||
+        (current_state == ST && Mem_Req_Ready && !NOP && is_store) ||
+        (current_state == EX && !NOP &&
+            (is_j_instr || is_jr_instr || is_REGIMM || (is_branch && !is_link_jump)) &&
+            (next_state == IF)
+        );
+
+  assign increment_retired_load = (current_state == WB && Regwrite_fsm && !NOP && is_load);
+  assign increment_retired_store = (current_state == ST && Mem_Req_Ready && !NOP && is_store);
+  assign increment_branch_executed = (current_state == EX && !NOP && is_branch);
+  assign increment_branch_taken = (current_state == EX && !NOP && is_branch && branch_condition_satisfied);
+  assign increment_if_stall = (current_state == IF && !Inst_Req_Ready && !rst);
+  assign increment_mem_access_stall = ((current_state == LD || current_state == ST) && !Mem_Req_Ready && !rst);
+  assign increment_iw_stall = (current_state == IW && !Inst_Valid && !rst);
+  assign increment_rdw_stall = (current_state == RDW && !Read_data_Valid && !rst);
+  assign increment_jump_executed = (current_state == EX && !NOP && is_jump);
+  // For ALU/Shift, ensure it's not a mem op address calc or branch compare
+  assign increment_alu_op_executed = (current_state == EX && !NOP && is_alu_operation && !is_load_store && !is_branch && !is_jump);
+  assign increment_shift_op_executed = (current_state == EX && !NOP && is_shift_operation && !is_load_store && !is_branch && !is_jump);
+  assign increment_nop_in_id = (current_state == ID && NOP && !rst); // NOP is decoded in ID
+  assign increment_total_mem_ops = (current_state == EX && !NOP && is_load_store); // Count when it enters EX, destined for MEM
+  assign increment_reg_writes = (current_state == WB && RF_wen && !rst);
+
+
+  // Cycle Count (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_cycle_count <= 32'd0;
+    end else begin
+      perf_cycle_count <= perf_cycle_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_0 = perf_cycle_count;
+
+  // Retired Instruction Count (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_retired_inst_count <= 32'd0;
+    end else if (increment_retired_inst) begin
+      perf_retired_inst_count <= perf_retired_inst_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_1 = perf_retired_inst_count;
+
+  // Retired Load Instruction Count (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_retired_load_count <= 32'd0;
+    end else if (increment_retired_load) begin
+      perf_retired_load_count <= perf_retired_load_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_2 = perf_retired_load_count;
+
+  // Retired Store Instruction Count (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_retired_store_count <= 32'd0;
+    end else if (increment_retired_store) begin
+      perf_retired_store_count <= perf_retired_store_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_3 = perf_retired_store_count;
+
+  // Total Branch Instructions Executed (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_branch_executed_count <= 32'd0;
+    end else if (increment_branch_executed) begin
+      perf_branch_executed_count <= perf_branch_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_4 = perf_branch_executed_count;
+
+  // Taken Branch Instructions Executed (Same as before)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_branch_taken_count <= 32'd0;
+    end else if (increment_branch_taken) begin
+      perf_branch_taken_count <= perf_branch_taken_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_5 = perf_branch_taken_count;
+
+
+  // ---- New Counter Implementations ----
+
+  // cnt_6: IF Stage Stalls
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_if_stall_count <= 32'd0;
+    end else if (increment_if_stall) begin
+      perf_if_stall_count <= perf_if_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_6 = perf_if_stall_count;
+
+  // cnt_7: Data Memory Access Stalls (LD/ST stalls on Mem_Req_Ready)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_mem_access_stall_count <= 32'd0;
+    end else if (increment_mem_access_stall) begin
+      perf_mem_access_stall_count <= perf_mem_access_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_7 = perf_mem_access_stall_count;
+
+  // cnt_8: IW Stage Stalls
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_iw_stall_count <= 32'd0;
+    end else if (increment_iw_stall) begin
+      perf_iw_stall_count <= perf_iw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_8 = perf_iw_stall_count;
+
+  // cnt_9: RDW Stage Stalls
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_rdw_stall_count <= 32'd0;
+    end else if (increment_rdw_stall) begin
+      perf_rdw_stall_count <= perf_rdw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_9 = perf_rdw_stall_count;
+
+  // cnt_10: Jump Instructions Executed
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_jump_executed_count <= 32'd0;
+    end else if (increment_jump_executed) begin
+      perf_jump_executed_count <= perf_jump_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_10 = perf_jump_executed_count;
+
+  // cnt_11: ALU Instructions Executed
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_alu_op_executed_count <= 32'd0;
+    end else if (increment_alu_op_executed) begin
+      perf_alu_op_executed_count <= perf_alu_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_11 = perf_alu_op_executed_count;
+
+  // cnt_12: Shift Instructions Executed
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_shift_op_executed_count <= 32'd0;
+    end else if (increment_shift_op_executed) begin
+      perf_shift_op_executed_count <= perf_shift_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_12 = perf_shift_op_executed_count;
+
+  // cnt_13: NOP Instructions Encountered in ID
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_nop_in_id_count <= 32'd0;
+    end else if (increment_nop_in_id) begin
+      perf_nop_in_id_count <= perf_nop_in_id_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_13 = perf_nop_in_id_count;
+
+  // cnt_14: Total Memory Operations (Load + Store issued to EX)
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_total_mem_ops_count <= 32'd0;
+    end else if (increment_total_mem_ops) begin
+      perf_total_mem_ops_count <= perf_total_mem_ops_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_14 = perf_total_mem_ops_count;
+
+  // cnt_15: Register File Writes
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      perf_reg_writes_count <= 32'd0;
+    end else if (increment_reg_writes) begin
+      perf_reg_writes_count <= perf_reg_writes_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_15 = perf_reg_writes_count;
+
 endmodule
 
 

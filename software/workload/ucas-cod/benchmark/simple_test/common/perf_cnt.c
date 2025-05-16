@@ -3,7 +3,8 @@
 unsigned long _uptime() {
   // TODO [COD]
   //   You can use this function to access performance counter related with time or cycle.
-  return 0;
+  volatile unsigned long *cycle_counter_ptr = (volatile unsigned long *)0x60010000;
+  return *cycle_counter_ptr;
 }
 
 void bench_prepare(Result *res) {
