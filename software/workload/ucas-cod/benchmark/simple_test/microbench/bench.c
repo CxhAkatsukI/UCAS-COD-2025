@@ -119,7 +119,7 @@ int main() {
 
       if (succ && best_msec != ULONG_MAX) {
           printk("  --- Performance Counters for [%s] (Best Cycle Run Deltas) ---\n", bench->name);
-          printk("    Cycles           :         %u\n", (unsigned int)best_msec);
+          printk("    Cycles:                    %u\n", (unsigned int)best_msec);
           printk("    Retired Instructions:      %u\n", (unsigned int)best_perf_retired_inst_count);
           printk("    Retired Loads:             %u\n", (unsigned int)best_perf_retired_load_count);
           printk("    Retired Stores:            %u\n", (unsigned int)best_perf_retired_store_count);

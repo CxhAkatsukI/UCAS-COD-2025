@@ -583,12 +583,12 @@ localparam INIT = 9'b000000001, // Initial State
   // Performance Counters
   //============================================================================
 
-  reg [31:0] perf_cycle_count;
-  reg [31:0] perf_retired_inst_count;
-  reg [31:0] perf_retired_load_count;
-  reg [31:0] perf_retired_store_count;
-  reg [31:0] perf_branch_executed_count;
-  reg [31:0] perf_branch_taken_count;
+  reg [31:0] perf_cycle_count;             // cnt_0
+  reg [31:0] perf_retired_inst_count;      // cnt_1
+  reg [31:0] perf_retired_load_count;      // cnt_2
+  reg [31:0] perf_retired_store_count;     // cnt_3
+  reg [31:0] perf_branch_executed_count;   // cnt_4
+  reg [31:0] perf_branch_taken_count;      // cnt_5
   reg [31:0] perf_if_stall_count;          // cnt_6
   reg [31:0] perf_mem_access_stall_count;  // cnt_7 (LD/ST stalls on Mem_Req_Ready)
   reg [31:0] perf_iw_stall_count;          // cnt_8
@@ -646,7 +646,7 @@ localparam INIT = 9'b000000001, // Initial State
   assign increment_reg_writes = (current_state == WB && RF_wen && !rst);
 
 
-  // Cycle Count (Same as before)
+  // cnt_0: Cycle Count
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_cycle_count <= 32'd0;
@@ -656,7 +656,7 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_0 = perf_cycle_count;
 
-  // Retired Instruction Count (Same as before)
+  // cnt_1: Retired Instruction Count
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_retired_inst_count <= 32'd0;
@@ -666,7 +666,7 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_1 = perf_retired_inst_count;
 
-  // Retired Load Instruction Count (Same as before)
+  // cnt_2: Retired Load Instruction Count
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_retired_load_count <= 32'd0;
@@ -676,7 +676,7 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_2 = perf_retired_load_count;
 
-  // Retired Store Instruction Count (Same as before)
+  // cnt_3: Retired Store Instruction Count
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_retired_store_count <= 32'd0;
@@ -686,7 +686,7 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_3 = perf_retired_store_count;
 
-  // Total Branch Instructions Executed (Same as before)
+  // cnt_4: Total Branch Instructions Executed
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_branch_executed_count <= 32'd0;
@@ -696,7 +696,7 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_4 = perf_branch_executed_count;
 
-  // Taken Branch Instructions Executed (Same as before)
+  // cnt_5: Taken Branch Instructions Executed
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       perf_branch_taken_count <= 32'd0;
@@ -705,9 +705,6 @@ localparam INIT = 9'b000000001, // Initial State
     end
   end
   assign cpu_perf_cnt_5 = perf_branch_taken_count;
-
-
-  // ---- New Counter Implementations ----
 
   // cnt_6: IF Stage Stalls
   always @(posedge clk or posedge rst) begin
