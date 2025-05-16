@@ -796,15 +796,6 @@ localparam INIT = 9'b000000001, // Initial State
   end
   assign cpu_perf_cnt_14 = perf_total_mem_ops_count;
 
-  // cnt_15: Register File Writes
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
-      perf_reg_writes_count <= 32'd0;
-    end else if (increment_reg_writes) begin
-      perf_reg_writes_count <= perf_reg_writes_count + 1;
-    end
-  end
-  assign cpu_perf_cnt_15 = perf_reg_writes_count;
 
 endmodule
 
