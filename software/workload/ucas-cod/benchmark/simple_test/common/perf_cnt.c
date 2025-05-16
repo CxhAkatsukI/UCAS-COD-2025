@@ -66,5 +66,22 @@ void bench_done(Result *res) {
   // TODO [COD]
   //  Add postprocess code, record performance counters' current states.
   res->msec = _uptime() - res->msec;
+  Result temp;
+  read_all_perf_counters(&temp);
+  res->perf_retired_inst_count = temp.perf_retired_inst_count - res->perf_retired_inst_count;
+  res->perf_retired_load_count = temp.perf_retired_load_count - res->perf_retired_load_count;
+  res->perf_retired_store_count = temp.perf_retired_store_count - res->perf_retired_store_count;
+  res->perf_branch_executed_count = temp.perf_branch_executed_count - res->perf_branch_executed_count;
+  res->perf_branch_taken_count = temp.perf_branch_taken_count - res->perf_branch_taken_count;
+  res->perf_if_stall_count = temp.perf_if_stall_count - res->perf_if_stall_count;
+  res->perf_mem_access_stall_count = temp.perf_mem_access_stall_count - res->perf_mem_access_stall_count;
+  res->perf_iw_stall_count = temp.perf_iw_stall_count - res->perf_iw_stall_count;
+  res->perf_rdw_stall_count = temp.perf_rdw_stall_count - res->perf_rdw_stall_count;
+  res->perf_jump_executed_count = temp.perf_jump_executed_count - res->perf_jump_executed_count;
+  res->perf_alu_op_executed_count = temp.perf_alu_op_executed_count - res->perf_alu_op_executed_count;
+  res->perf_shift_op_executed_count = temp.perf_shift_op_executed_count - res->perf_shift_op_executed_count;
+  res->perf_nop_in_id_count = temp.perf_nop_in_id_count - res->perf_nop_in_id_count;
+  res->perf_total_mem_ops_count = temp.perf_total_mem_ops_count - res->perf_total_mem_ops_count;
+  res->perf_reg_writes_count = temp.perf_reg_writes_count - res->perf_reg_writes_count;
 }
 

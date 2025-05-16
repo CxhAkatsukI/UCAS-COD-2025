@@ -54,45 +54,100 @@ int main() {
 
   _Static_assert(ARR_SIZE(benchmarks) > 0, "non benchmark");
 
-  for (int i = 0; i < ARR_SIZE(benchmarks); i ++) {
+  for (int i = 0; i < ARR_SIZE(benchmarks); i++) {
     Benchmark *bench = &benchmarks[i];
-    current = bench;
-    setting = &bench->settings[SETTING];
-    const char *msg = bench_check(bench);
+    current          = bench;
+    setting          = &bench->settings[SETTING];
+    const char *msg  = bench_check(bench);
     printk("[%s] %s: ", bench->name, bench->desc);
+
     if (msg != NULL) {
       printk("Ignored %s\n", msg);
     } else {
-      unsigned long msec = ULONG_MAX;
-      int succ = 1;
-      for (int i = 0; i < REPEAT; i ++) {
-        Result res;
-        run_once(bench, &res);
-        printk(res.pass ? "*" : "X");
-        succ &= res.pass;
-        if (res.msec < msec) msec = res.msec;
+      unsigned long best_msec                         = ULONG_MAX;
+      int succ                                        = 1;
+
+      unsigned long best_perf_retired_inst_count    = 0;
+      unsigned long best_perf_retired_load_count    = 0;
+      unsigned long best_perf_retired_store_count   = 0;
+      unsigned long best_perf_branch_executed_count = 0;
+      unsigned long best_perf_branch_taken_count    = 0;
+      unsigned long best_perf_if_stall_count        = 0;
+      unsigned long best_perf_mem_access_stall_count= 0;
+      unsigned long best_perf_iw_stall_count        = 0;
+      unsigned long best_perf_rdw_stall_count       = 0;
+      unsigned long best_perf_jump_executed_count   = 0;
+      unsigned long best_perf_alu_op_executed_count = 0;
+      unsigned long best_perf_shift_op_executed_count = 0;
+      unsigned long best_perf_nop_in_id_count       = 0;
+      unsigned long best_perf_total_mem_ops_count   = 0;
+      unsigned long best_perf_reg_writes_count      = 0;
+
+      for (int r = 0; r < REPEAT; r++) {
+        Result current_run_res;
+        run_once(bench, &current_run_res);
+
+        printk(current_run_res.pass ? "*" : "X");
+        succ &= current_run_res.pass;
+
+        if (current_run_res.msec < best_msec) {
+          best_msec                         = current_run_res.msec;
+          best_perf_retired_inst_count    = current_run_res.perf_retired_inst_count;
+          best_perf_retired_load_count    = current_run_res.perf_retired_load_count;
+          best_perf_retired_store_count   = current_run_res.perf_retired_store_count;
+          best_perf_branch_executed_count = current_run_res.perf_branch_executed_count;
+          best_perf_branch_taken_count    = current_run_res.perf_branch_taken_count;
+          best_perf_if_stall_count        = current_run_res.perf_if_stall_count;
+          best_perf_mem_access_stall_count= current_run_res.perf_mem_access_stall_count;
+          best_perf_iw_stall_count        = current_run_res.perf_iw_stall_count;
+          best_perf_rdw_stall_count       = current_run_res.perf_rdw_stall_count;
+          best_perf_jump_executed_count   = current_run_res.perf_jump_executed_count;
+          best_perf_alu_op_executed_count = current_run_res.perf_alu_op_executed_count;
+          best_perf_shift_op_executed_count = current_run_res.perf_shift_op_executed_count;
+          best_perf_nop_in_id_count       = current_run_res.perf_nop_in_id_count;
+          best_perf_total_mem_ops_count   = current_run_res.perf_total_mem_ops_count;
+          best_perf_reg_writes_count      = current_run_res.perf_reg_writes_count;
+        }
       }
 
-      if (succ) printk(" Passed.\n");
-      else printk(" Failed.\n");
-
+      if (succ) {
+        printk(" Passed.\n");
+      } else {
+        printk(" Failed.\n");
+      }
       pass &= succ;
 
-      // TODO [COD]
-      //   A benchmark is finished here, you can use printk to output some informantion.
-      //   `msec' is intended indicate the time (or cycle),
-      //   you can ignore according to your performance counters semantics.
-      printk(" --- Performance counters semantic ---\n");
-      printk("perf_cycle_count: %u\n", msec);
+      if (succ && best_msec != ULONG_MAX) {
+          printk("  --- Performance Counters for [%s] (Best Cycle Run Deltas) ---\n", bench->name);
+          printk("    Cycles           :         %u\n", (unsigned int)best_msec);
+          printk("    Retired Instructions:      %u\n", (unsigned int)best_perf_retired_inst_count);
+          printk("    Retired Loads:             %u\n", (unsigned int)best_perf_retired_load_count);
+          printk("    Retired Stores:            %u\n", (unsigned int)best_perf_retired_store_count);
+          printk("    Branches Executed:         %u\n", (unsigned int)best_perf_branch_executed_count);
+          printk("    Branches Taken:            %u\n", (unsigned int)best_perf_branch_taken_count);
+          printk("    IF Stalls:                 %u\n", (unsigned int)best_perf_if_stall_count);
+          printk("    MEM Access Stalls:         %u\n", (unsigned int)best_perf_mem_access_stall_count);
+          printk("    IW Stalls:                 %u\n", (unsigned int)best_perf_iw_stall_count);
+          printk("    RDW Stalls:                %u\n", (unsigned int)best_perf_rdw_stall_count);
+          printk("    Jumps Executed:            %u\n", (unsigned int)best_perf_jump_executed_count);
+          printk("    ALU Ops Executed:          %u\n", (unsigned int)best_perf_alu_op_executed_count);
+          printk("    Shift Ops Executed:        %u\n", (unsigned int)best_perf_shift_op_executed_count);
+          printk("    NOPs in ID:                %u\n", (unsigned int)best_perf_nop_in_id_count);
+          printk("    Total MEM Ops Issued:      %u\n", (unsigned int)best_perf_total_mem_ops_count);
+          printk("    Register Writes:           %u\n", (unsigned int)best_perf_reg_writes_count);
+          printk("  --- End of Counters for [%s] ---\n", bench->name);
+      } else if (succ) {
+          printk("  --- No performance data to display for [%s] (no runs completed with data) ---\n", bench->name);
+      }
     }
   }
 
   printk("benchmark finished\n");
 
   if(pass)
-	  hit_good_trap();
+      hit_good_trap();
   else
-	  nemu_assert(0);
+      nemu_assert(0);
 
   return 0;
 }
