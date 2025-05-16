@@ -643,7 +643,7 @@ localparam INIT = 9'b000000001, // Initial State
   assign increment_shift_op_executed = (current_state == EX && !NOP && is_shift_operation && !is_load_store && !is_branch && !is_jump);
   assign increment_nop_in_id = (current_state == ID && NOP && !rst); // NOP is decoded in ID
   assign increment_total_mem_ops = (current_state == EX && !NOP && is_load_store); // Count when it enters EX, destined for MEM
-  assign increment_reg_writes = (current_state == WB && RF_wen && !rst);
+  assign increment_reg_writes = (RF_wen && !rst);
 
 
   // cnt_0: Cycle Count
