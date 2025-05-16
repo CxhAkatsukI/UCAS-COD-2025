@@ -83,7 +83,7 @@ int main() {
       //   `msec' is intended indicate the time (or cycle),
       //   you can ignore according to your performance counters semantics.
       printk(" --- Performance counters semantic ---\n");
-      printk("perf_cycle_count: %lu\n", msec);
+      printk("perf_cycle_count: %u\n", msec);
     }
   }
 
