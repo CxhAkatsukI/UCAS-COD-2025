@@ -67,10 +67,10 @@ module custom_cpu (
     localparam ALU_SLT  = 3'b111; // Set Less Than (Signed)
 
     // Codes used to indicate operation is handled by shifter, not main ALU path for result
-    localparam ALU_SLL  = 3'bxxx; // Logical Shift Left
-    localparam ALU_SRL  = 3'bxxx; // Logical Shift Right
-    localparam ALU_SRA  = 3'bxxx; // Arithmetic Shift Right
-    localparam ALU_XXX  = 3'bxxx; // Undefined or Don't Care ALU operation
+    localparam ALU_SLL  = 3'b000; // Logical Shift Left
+    localparam ALU_SRL  = 3'b000; // Logical Shift Right
+    localparam ALU_SRA  = 3'b000; // Arithmetic Shift Right
+    localparam ALU_XXX  = 3'b000; // Undefined or Don't Care ALU operation
 
     // Shifter Operation Code Definitions
     localparam SHIFT_NONE = 2'b01; // No shift operation
