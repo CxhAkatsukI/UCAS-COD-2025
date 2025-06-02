@@ -198,7 +198,7 @@ assign s_axi_arsize     = arsize_r;
 assign s_axi_arburst    = arburst_r;
 assign s_axi_arvalid    = arvalid_r;
 assign cpu_mem_arready  = s_axi_arready & s_axi_arid == DATAID;
-assign cpu_inst_arready = s_axi_arready & s_axi_arid == INSTID;
+assign cpu_inst_arready = s_axi_arready & s_axi_arid == INSTID & ~cpu_mem_arvalid;
 
 assign s_axi_rready    = cpu_mem_rready | cpu_inst_rready;
 assign cpu_mem_rdata   = s_axi_rdata;
