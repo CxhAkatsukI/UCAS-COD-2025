@@ -2,7 +2,7 @@
 #include "Vcustom_cpu_test.h"
 
 #define TIME_SCALE (5)
-#define TIME_LIMIT (20000000000)
+#define TIME_LIMIT (2000000000)
 
 // Legacy function required only so linking works
 double sc_time_stamp() { return 0; }
@@ -30,6 +30,7 @@ int main(int argc, char** argv, char** env) {
 		if (main_time == 20) custom_cpu_test->sys_reset_n = 1;
 		
 		custom_cpu_test->eval();
+
 		if (++main_time >= TIME_LIMIT) goto finish;
 		contextp->timeInc(TIME_SCALE);
 	}
