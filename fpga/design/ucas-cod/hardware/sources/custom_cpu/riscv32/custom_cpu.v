@@ -379,7 +379,10 @@ module custom_cpu (
         .IF_Ready               (if_stage_ready),
         .branch_condition_satisfied(idu_branch_condition_out), // For Perf
         .Read_data_Ready        (Read_data_Ready), // For Perf
-        .Read_data_Valid        (Read_data_Valid)  // For Perf
+        .Read_data_Valid        (Read_data_Valid), // For Perf
+        .IRWrite                (ifu_IRWrite_out), // For Perf
+        .IF_stall               (ifu_IF_stall_out),
+        .IW_stall               (ifu_IW_stall_out)
     );
 
     assign pc_value_at_fetch_time = PC; // Capture PC at fetch time
@@ -411,7 +414,10 @@ module custom_cpu (
         .RF_rdata2      (idu_final_operand2_in),    // From FWDU
         .ID_rs1         (idu_rs1_for_hazard_out),   // To FWDU/CU
         .ID_rs2         (idu_rs2_for_hazard_out),   // To FWDU/CU
-        .branch_condition_satisfied(idu_branch_condition_out) // For Perf
+        .branch_condition_satisfied(idu_branch_condition_out), // For Perf
+        .is_branch      (idu_is_branch_out),        // For Perf
+        .is_jump        (idu_is_jump_out),          // For Perf
+        .is_nop         (idu_is_nop_out)            // For Perf
     );
 
     exu exu_inst (
@@ -452,10 +458,10 @@ module custom_cpu (
         // Pipeline control
         .pipeline_advance_enable(pipeline_advance_enable),
         .mem_ready              (mem_stage_ready),         // To CU
-        .mem_delay              (cpu_perf_cnt_8_internal_wire) // Connect to an internal wire for perf counter
-                                                               // cpu_perf_cnt_8 = cpu_perf_cnt_8_internal_wire
+        .mem_stall              (memu_mem_stall_out), // Connect to an internal wire for perf counter
+        .RDW_stall              (memu_RDW_stall_out)
     );
-    wire cpu_perf_cnt_8_internal_wire; // Example for connecting perf counter
+    wire memu_mem_stall_out; // Example for connecting perf counter
 
     wbu wbu_inst (
       .inst_valid (mw_inst_valid_reg),
@@ -466,37 +472,47 @@ module custom_cpu (
       .inst_retire(inst_retire) // Drive top-level output
     );
 
+    perf_counters perf_counters_inst (
+        .clk                    (clk),
+        .rst                    (rst),
+        .idu_branch_condition_out(idu_branch_condition_out), // From IDU
+        .idu_is_branch_out      (idu_is_branch_out), // From IDU
+        .pipeline_advance_enable(pipeline_advance_enable),
+        .ifu_IRWrite_out        (ifu_IRWrite_out), // From IFU
+        .mw_inst_valid_reg      (mw_inst_valid_reg), // From MEM/WB reg
+        .idu_mem_read_out       (idu_mem_read_out), // From IDU
+        .idu_mem_write_out      (idu_mem_write_out), // From IDU
+        .ifu_IF_stall_out       (ifu_IF_stall_out), // From IFU
+        .memu_mem_stall_out     (memu_mem_stall_out), // From MEMU
+        .ifu_IW_stall_out       (ifu_IW_stall_out), // From IFU
+        .memu_RDW_stall_out     (memu_RDW_stall_out), // From MEMU
+        .idu_is_jump_out        (idu_is_jump_out), // From IDU
+        .idu_is_nop_out         (idu_is_nop_out), // From IDU
+        .idu_is_alu_op_out      (idu_is_alu_op_out), // From IDU
+        .idu_is_shifter_op_out  (idu_is_shifter_op_out), // From IDU
+        .wb_rf_wen_internal     (wb_rf_wen_internal), // From MEM/WB reg
+        .cpu_perf_cnt_0         (cpu_perf_cnt_0),
+        .cpu_perf_cnt_1         (cpu_perf_cnt_1),
+        .cpu_perf_cnt_2         (cpu_perf_cnt_2),
+        .cpu_perf_cnt_3         (cpu_perf_cnt_3),
+        .cpu_perf_cnt_4         (cpu_perf_cnt_4),
+        .cpu_perf_cnt_5         (cpu_perf_cnt_5),
+        .cpu_perf_cnt_6         (cpu_perf_cnt_6),
+        .cpu_perf_cnt_7         (cpu_perf_cnt_7),
+        .cpu_perf_cnt_8         (cpu_perf_cnt_8),
+        .cpu_perf_cnt_9         (cpu_perf_cnt_9),
+        .cpu_perf_cnt_10        (cpu_perf_cnt_10),
+        .cpu_perf_cnt_11        (cpu_perf_cnt_11),
+        .cpu_perf_cnt_12        (cpu_perf_cnt_12),
+        .cpu_perf_cnt_13        (cpu_perf_cnt_13),
+        .cpu_perf_cnt_14        (cpu_perf_cnt_14),
+        .cpu_perf_cnt_15        (cpu_perf_cnt_15)
+    );
+
     // Address to memory (driven by EX/MEM register's ALU result if it's a mem op)
     // MEMU internal Address is alu_result_from_exmem
     // Top-level Address should be driven by the address calculated in EX and passed to MEM
     assign Address = (em_mem_read_reg || em_mem_write_reg) ? em_result_reg : 32'b0; // Or some default/hold
-
-
-    // Performance Counters
-    // This requires a separate perf_cnt module or direct accumulation logic here.
-    // For now, just assign them.
-    // Example: Cycle counter
-    reg [31:0] cycle_counter_reg;
-    always @(posedge clk or posedge rst) begin
-        if (rst) cycle_counter_reg <= 0;
-        else cycle_counter_reg <= cycle_counter_reg + 1;
-    end
-    assign cpu_perf_cnt_0 = cycle_counter_reg;
-    assign cpu_perf_cnt_1 = 0; // TODO
-    assign cpu_perf_cnt_2 = 0; // TODO
-    assign cpu_perf_cnt_3 = 0; // TODO
-    assign cpu_perf_cnt_4 = 0; // TODO
-    assign cpu_perf_cnt_5 = 0; // TODO
-    assign cpu_perf_cnt_6 = 0; // TODO
-    assign cpu_perf_cnt_7 = 0; // TODO
-    assign cpu_perf_cnt_8 = cpu_perf_cnt_8_internal_wire; // From MEMU delay
-    assign cpu_perf_cnt_9 = 0; // TODO
-    assign cpu_perf_cnt_10 = 0; // TODO
-    assign cpu_perf_cnt_11 = 0; // TODO
-    assign cpu_perf_cnt_12 = 0; // TODO
-    assign cpu_perf_cnt_13 = 0; // TODO
-    assign cpu_perf_cnt_14 = 0; // TODO
-    assign cpu_perf_cnt_15 = 0; // TODO
 
 endmodule
 
@@ -525,7 +541,11 @@ module ifu (
 
   input             branch_condition_satisfied, // For perf counters
   input             Read_data_Ready, // For perf counters
-  input             Read_data_Valid
+  input             Read_data_Valid,
+
+  output            IRWrite, // For perf counters
+  output            IF_stall,
+  output            IW_stall
 );
 
   localparam INIT = 5'b00001;
@@ -611,6 +631,8 @@ module ifu (
   assign Inst_Ready = (current_state == INIT) || (current_state == IW);
   assign IF_Ready = (current_state == RDY);
   assign pc_write_enable = (current_state == STA) && !ld_use_harzard;
+  assign IF_stall = (current_state == IF && !Inst_Req_Ready && !rst);
+  assign IW_stall = (current_state == IW && !Inst_Valid && !rst);
 
 
   always @(posedge clk) begin
@@ -669,7 +691,10 @@ module idu (
   output [ 4:0] ID_rs1,
   output [ 4:0] ID_rs2,
 
-  output        branch_condition_satisfied // for perf counters
+  output        branch_condition_satisfied, // for perf counters
+  output        is_branch, // for perf counters
+  output        is_jump,   // for perf counters
+  output        is_nop     // for perf counters
 );
 
   //----------------------------------------------------------------------------
@@ -760,6 +785,7 @@ module idu (
   assign      is_jalr  = (opcode == 7'b1100111); // JALR instruction
   assign      is_lui   = (opcode == 7'b0110111); // LUI instruction
   assign      is_auipc = (opcode == 7'b0010111); // AUIPC instruction
+  assign      is_nop   = (IR    == 8'h00000013); // NOP instruction
 
   // -- Control Signals for Instruction Types --
   assign      is_I     = is_OPIMM || is_load || is_jalr; // I-type instruction
@@ -913,6 +939,11 @@ module idu (
                             (is_I || is_R || is_J || is_U) ? RF_rdata1 : // Data for I, R, J, U types
                             32'b0; // Default: No data to write
 
+  // assign is_branch for perf counters
+  assign is_branch = is_B;
+
+  // assign is_jump for perf counters
+  assign is_jump = (is_J || is_jalr);
 endmodule
 
 // exu does not account for whether this is an alu or shifter operation
@@ -980,7 +1011,8 @@ module memu (
   input         pipeline_advance_enable,
   output        mem_ready,
 
-  output        mem_delay // for perf counters
+  output        mem_stall, // for perf counters
+  output        RDW_stall
 );
 
   localparam IDLE = 5'b00001, // Initial state
@@ -1016,7 +1048,8 @@ module memu (
   assign MemRead  = (current_state == LD);
   assign Read_data_Ready = (current_state == RDW);
   assign mem_ready = (current_state == RDY);
-  assign mem_delay = (current_state == LD) || (current_state == ST) || (current_state == RDW);
+  assign mem_stall = ((current_state == LD || current_state == ST) && !Mem_Req_Ready && !rst);
+  assign RDW_stall = (current_state == RDW && !Read_data_Valid && !rst);
 
   //============================================================================
   // PIPELINE STAGE 4: Memory Access (MEM)
@@ -1137,4 +1170,258 @@ module fwdu (
                    wb_bp2  ? WB_RF_wdata    :
                    RF_rdata2;
 
+endmodule
+
+module perf_counters (
+  input clk,
+  input rst,
+
+  input idu_branch_condition_out,
+  input idu_is_branch_out,
+  input pipeline_advance_enable,
+  input ifu_IRWrite_out, // this signal changes when an instruction is fetched, used as increment sign
+  input mw_inst_valid_reg,
+  input idu_mem_read_out,
+  input idu_mem_write_out,
+  input ifu_IF_stall_out,
+  input memu_mem_stall_out,
+  input ifu_IW_stall_out,
+  input memu_RDW_stall_out,
+  input idu_is_jump_out,
+  input idu_is_alu_op_out,
+  input idu_is_shifter_op_out,
+  input idu_is_nop_out,
+  input wb_rf_wen_internal,
+
+  output [31:0] cpu_perf_cnt_0,
+  output [31:0] cpu_perf_cnt_1,
+  output [31:0] cpu_perf_cnt_2,
+  output [31:0] cpu_perf_cnt_3,
+  output [31:0] cpu_perf_cnt_4,
+  output [31:0] cpu_perf_cnt_5,
+  output [31:0] cpu_perf_cnt_6,
+  output [31:0] cpu_perf_cnt_7,
+  output [31:0] cpu_perf_cnt_8,
+  output [31:0] cpu_perf_cnt_9,
+  output [31:0] cpu_perf_cnt_10,
+  output [31:0] cpu_perf_cnt_11,
+  output [31:0] cpu_perf_cnt_12,
+  output [31:0] cpu_perf_cnt_13,
+  output [31:0] cpu_perf_cnt_14,
+  output [31:0] cpu_perf_cnt_15
+);
+
+//----------------------------------------------------------------------------
+// Performance Counter Increment Signals (RISC-V Version)
+//----------------------------------------------------------------------------
+  reg [31:0] perf_cycle_count;             // cnt_0
+  reg [31:0] perf_retired_inst_count;      // cnt_1
+  reg [31:0] perf_retired_load_count;      // cnt_2
+  reg [31:0] perf_retired_store_count;     // cnt_3
+  reg [31:0] perf_branch_executed_count;   // cnt_4
+  reg [31:0] perf_branch_taken_count;      // cnt_5
+  reg [31:0] perf_if_stall_count;          // cnt_6
+  reg [31:0] perf_mem_access_stall_count;  // cnt_7 (LD/ST stalls on Mem_Req_Ready)
+  reg [31:0] perf_iw_stall_count;          // cnt_8
+  reg [31:0] perf_rdw_stall_count;         // cnt_9
+  reg [31:0] perf_jump_executed_count;     // cnt_10
+  reg [31:0] perf_alu_op_executed_count;   // cnt_11
+  reg [31:0] perf_shift_op_executed_count; // cnt_12
+  reg [31:0] perf_nop_in_id_count;         // cnt_13
+  reg [31:0] perf_total_mem_ops_count;     // cnt_14
+  reg [31:0] perf_reg_writes_count;        // cnt_15
+
+
+  // Logic for incrementing counters
+  wire increment_retired_inst;
+  wire increment_retired_load;
+  wire increment_retired_store;
+  wire increment_branch_executed;
+  wire increment_branch_taken;
+  wire increment_if_stall;
+  wire increment_mem_access_stall;
+  wire increment_iw_stall;
+  wire increment_rdw_stall;
+  wire increment_jump_executed;
+  wire increment_alu_op_executed;
+  wire increment_shift_op_executed;
+  wire increment_nop_in_id;
+  wire increment_total_mem_ops;
+  wire increment_reg_writes;
+
+  assign increment_retired_inst = pipeline_advance_enable && mw_inst_valid_reg;
+  assign increment_retired_load = idu_mem_read_out && ifu_IRWrite_out;
+  assign increment_retired_store = idu_mem_write_out && ifu_IRWrite_out;
+  assign increment_branch_executed = idu_is_branch_out && ifu_IRWrite_out;
+  assign increment_branch_taken = idu_branch_condition_out && ifu_IRWrite_out;
+  assign increment_if_stall = ifu_IF_stall_out;
+  assign increment_mem_access_stall = memu_mem_stall_out;
+  assign increment_iw_stall = ifu_IW_stall_out;
+  assign increment_rdw_stall = memu_RDW_stall_out;
+  assign increment_jump_executed = idu_is_jump_out && ifu_IRWrite_out;
+  assign increment_alu_op_executed = idu_is_alu_op_out && ifu_IRWrite_out;
+  assign increment_shift_op_executed = idu_is_shifter_op_out && ifu_IRWrite_out;
+  assign increment_nop_in_id = idu_is_nop_out && ifu_IRWrite_out;
+  assign increment_total_mem_ops = increment_retired_store || increment_retired_load;
+  assign increment_reg_writes = wb_rf_wen_internal;
+
+  // cnt_0: Cycle Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_cycle_count <= 32'd0;
+    end else begin
+      perf_cycle_count <= perf_cycle_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_0 = perf_cycle_count;
+
+  // cnt_1: Retired Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_inst_count <= 32'd0;
+    end else if (increment_retired_inst) begin
+      perf_retired_inst_count <= perf_retired_inst_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_1 = perf_retired_inst_count;
+
+  // cnt_2: Retired Load Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_load_count <= 32'd0;
+    end else if (increment_retired_load) begin
+      perf_retired_load_count <= perf_retired_load_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_2 = perf_retired_load_count;
+
+  // cnt_3: Retired Store Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_store_count <= 32'd0;
+    end else if (increment_retired_store) begin
+      perf_retired_store_count <= perf_retired_store_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_3 = perf_retired_store_count;
+
+  // cnt_4: Total Branch Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_branch_executed_count <= 32'd0;
+    end else if (increment_branch_executed) begin
+      perf_branch_executed_count <= perf_branch_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_4 = perf_branch_executed_count;
+
+  // cnt_5: Taken Branch Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_branch_taken_count <= 32'd0;
+    end else if (increment_branch_taken) begin
+      perf_branch_taken_count <= perf_branch_taken_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_5 = perf_branch_taken_count;
+
+  // cnt_6: IF Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_if_stall_count <= 32'd0;
+    end else if (increment_if_stall) begin
+      perf_if_stall_count <= perf_if_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_6 = perf_if_stall_count;
+
+  // cnt_7: Data Memory Access Stalls (LD/ST stalls on Mem_Req_Ready)
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_mem_access_stall_count <= 32'd0;
+    end else if (increment_mem_access_stall) begin
+      perf_mem_access_stall_count <= perf_mem_access_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_7 = perf_mem_access_stall_count;
+
+  // cnt_8: IW Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_iw_stall_count <= 32'd0;
+    end else if (increment_iw_stall) begin
+      perf_iw_stall_count <= perf_iw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_8 = perf_iw_stall_count;
+
+  // cnt_9: RDW Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_rdw_stall_count <= 32'd0;
+    end else if (increment_rdw_stall) begin
+      perf_rdw_stall_count <= perf_rdw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_9 = perf_rdw_stall_count;
+
+  // cnt_10: Jump Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_jump_executed_count <= 32'd0;
+    end else if (increment_jump_executed) begin
+      perf_jump_executed_count <= perf_jump_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_10 = perf_jump_executed_count;
+
+  // cnt_11: ALU Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_alu_op_executed_count <= 32'd0;
+    end else if (increment_alu_op_executed) begin
+      perf_alu_op_executed_count <= perf_alu_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_11 = perf_alu_op_executed_count;
+
+  // cnt_12: Shift Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_shift_op_executed_count <= 32'd0;
+    end else if (increment_shift_op_executed) begin
+      perf_shift_op_executed_count <= perf_shift_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_12 = perf_shift_op_executed_count;
+
+  // cnt_13: NOP Instructions Encountered in ID
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_nop_in_id_count <= 32'd0;
+    end else if (increment_nop_in_id) begin
+      perf_nop_in_id_count <= perf_nop_in_id_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_13 = perf_nop_in_id_count;
+
+  // cnt_14: Total Memory Operations (Load + Store issued to EX)
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_total_mem_ops_count <= 32'd0;
+    end else if (increment_total_mem_ops) begin
+      perf_total_mem_ops_count <= perf_total_mem_ops_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_14 = perf_total_mem_ops_count;
+
+  // cnt_15: Register File Writes
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_reg_writes_count <= 32'd0;
+    end else if (increment_reg_writes) begin
+      perf_reg_writes_count <= perf_reg_writes_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_15 = perf_reg_writes_count;
 endmodule
