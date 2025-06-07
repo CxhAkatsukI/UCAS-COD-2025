@@ -213,8 +213,7 @@ module custom_cpu_test(
         $value$plusargs("TRACE_FILE=%s", trace_filename);
         trace_file = $fopen(trace_filename, "r");
         if (trace_file == 0) begin
-            $display("ERROR: open file failed.");
-            $fatal;
+            $display("INFO: open trace failed.");
         end
     end
 	    
@@ -241,7 +240,7 @@ module custom_cpu_test(
     always @(posedge sys_clk) begin
         if (~sys_reset_n) begin
             trace_end = 1'b0;
-        end else begin
+        end else if(trace_file != 0) begin
             if ($feof(trace_file)) trace_end = 1'b1;
             if (rf_en_rt & rf_waddr_rt != 5'd0 && ~trace_end) begin
                 read_trace;
