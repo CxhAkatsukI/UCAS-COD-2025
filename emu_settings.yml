@@ -2,8 +2,8 @@ variables:
   ### Custom CPU Emulation Flow (TARGET_DESIGN is "custom_cpu_emu") ###
 
   # Specify benchmark suite & name to run
-  EMU_BENCH_SUITE: "medium"
-  EMU_BENCH_NAME: "add"
+  EMU_BENCH_SUITE: "microbench"
+  EMU_BENCH_NAME: "sieve"
 
   # Specify whether a manual replay is enabled
   # A replayed waveform file will be generated:
