@@ -24,12 +24,20 @@ module custom_cpu_test (
     // Open trace file
     integer trace_file, type_num, ret;
     reg [4095:0] trace_filename;
+    reg mode;
+
+    `define MODE_READ 0
+    `define MODE_WRITE 1
     initial begin
         $value$plusargs("TRACE_FILE=%s", trace_filename);
         trace_file = $fopen(trace_filename, "r");
-        if (trace_file == 0) begin
-            $display("ERROR: open file failed.");
-            $fatal;
+        if (trace_file != 0) begin
+            $display("Mode: read trace file\n");
+            mode = `MODE_READ;
+        end else begin
+            $display("Mode: write trace file\n");
+            trace_file = $fopen(trace_filename, "w");
+            mode = `MODE_WRITE;
         end
     end
 
@@ -65,7 +73,7 @@ module custom_cpu_test (
     always @(posedge sys_clk) begin
         if (~sys_reset_n) begin
             trace_end = 1'b0;
-        end else begin
+        end else if(mode == `MODE_READ) begin
             if ($feof(trace_file)) trace_end = 1'b1;
             if (rf_en_rt & rf_waddr_rt != 5'd0 && ~trace_end) begin
                 read_trace;
@@ -89,6 +97,10 @@ module custom_cpu_test (
                     $fatal;
                 end
             end
+        end else if(mode == `MODE_WRITE)begin
+            if (rf_en_rt & rf_waddr_rt != 5'd0) begin
+                $fdisplay(trace_file, "1 %h %d %h %h %d",pc_rt,rf_waddr_golden, rf_wdata_golden, rf_bit_cmp_ref, mem_read_ref);
+            end
         end
     end
 
@@ -97,19 +109,21 @@ module custom_cpu_test (
             $display("=================================================");
             $display("Hit good trap");
             $display("=================================================");
+            $fclose(trace_file);
             $finish;
         end
         if (`GLOBAL_RESULT == 32'h1) begin
             $display("=================================================");
             $display("ERROR: Hit bad trap");
             $display("=================================================");
+            $fclose(trace_file);
             $finish;
         end
     end
 
     reg [4095:0] dumpfile;
     initial begin
-        if ($value$plusargs("DUMP=%s", dumpfile)) begin
+        if ($value$plusargs("DUMP=%s", dumpfile) && mode == `MODE_READ) begin
             $dumpfile(dumpfile);
             $dumpvars();
         end
