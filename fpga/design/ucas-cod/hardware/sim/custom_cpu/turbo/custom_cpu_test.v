@@ -32,11 +32,14 @@ module custom_cpu_test (
         $value$plusargs("TRACE_FILE=%s", trace_filename);
         trace_file = $fopen(trace_filename, "r");
         if (trace_file != 0) begin
-            $display("Mode: read trace file\n");
+            $display("INFO: read trace file\n");
             mode = `MODE_READ;
         end else begin
-            $display("Mode: write trace file\n");
+            $display("INFO: write trace file\n");
             trace_file = $fopen(trace_filename, "w");
+            if(trace_file == 0) begin
+                $display("ERROR: open file failed.\n");
+            end
             mode = `MODE_WRITE;
         end
     end
@@ -99,7 +102,7 @@ module custom_cpu_test (
             end
         end else if(mode == `MODE_WRITE)begin
             if (rf_en_rt & rf_waddr_rt != 5'd0) begin
-                $fdisplay(trace_file, "1 %h %d %h %h %d",pc_rt,rf_waddr_golden, rf_wdata_golden, rf_bit_cmp_ref, mem_read_ref);
+                $fwrite(trace_file, "1 %h %d %h %h %d\n",pc_rt,rf_waddr_rt, rf_wdata_rt, rf_wdata_rt, 0);
             end
         end
     end
