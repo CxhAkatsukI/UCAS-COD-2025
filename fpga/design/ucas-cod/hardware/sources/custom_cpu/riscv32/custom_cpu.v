@@ -77,7 +77,7 @@ module custom_cpu (
     wire        ifu_valid_to_fd_reg;
     wire [31:0] pc_value_at_fetch_time; // Wire to capture PC from IFU for FD reg
 
-    always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
         if (rst) begin
             fd_instruction_reg <= 32'h00000013; // NOP
             fd_pc_reg          <= 32'h0;
@@ -170,7 +170,7 @@ module custom_cpu (
     reg        de_rf_wen_reg;
     reg [4:0]  de_rf_waddr_reg;         // This is 'rd'
 
-    always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
         if (rst) begin
             de_inst_valid_reg       <= 1'b0;
             de_pc_reg               <= 32'b0;
@@ -241,7 +241,7 @@ module custom_cpu (
     reg        em_rf_wen_reg;
     reg [4:0]  em_rf_waddr_reg;           // rd
 
-    always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
         if (rst) begin
             em_inst_valid_reg       <= 1'b0;
             em_pc_reg               <= 32'b0;
@@ -290,7 +290,7 @@ module custom_cpu (
     reg        mw_rf_wen_reg;
     reg [4:0]  mw_rf_waddr_reg;   // rd
 
-    always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
         if (rst) begin
             mw_inst_valid_reg   <= 1'b0;
             mw_pc_reg           <= 32'b0;
@@ -1024,7 +1024,7 @@ module memu (
   reg  [4:0] current_state;
   wire [4:0] next_state;
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       current_state <= RDY;
     end else begin
