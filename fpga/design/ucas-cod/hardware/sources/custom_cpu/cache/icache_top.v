@@ -1,7 +1,7 @@
 `timescale 10ns / 1ns
 
 `define CACHE_SET	8
-`define CACHE_WAY	4
+`define CACHE_WAY	6
 `define TAG_LEN		24
 `define LINE_LEN	256
 
