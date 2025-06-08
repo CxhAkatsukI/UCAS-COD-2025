@@ -91,6 +91,24 @@ module dcache_top (
 
   //TODO: Please add your D-Cache code here
 
+  // FSM implementation
+  localparam INIT = 13'b00000_0000_0001,
+             WAIT_CPU = 13'b00000_0000_0010,
+             MISS_DT = 13'b00000_0000_0100,
+             MISS_CL = 13'b00000_0000_1000,
+             SYNC = 13'b00000_0001_0000,
+             REFILL = 13'b00000_0010_0000,
+             W_HIT = 13'b00000_0100_0000,
+             R_HIT = 13'b00000_1000_0000,
+             SEND_CPU_DATA = 13'b00001_0000_0000,
+             W_BP = 13'b00010_0000_0000,
+             R_BP = 13'b00100_0000_0000,
+             WRW = 13'b01000_0000_0000,
+             RDW = 13'b10000_0000_0000;
+
+  reg  [12:0] current_state;
+  reg  [12:0] next_state;
+
   // decode the CPU request address
   wire [     `TAG_LEN - 1:0] tag;
   wire [ `INDEX_WIDTH - 1:0] index;
@@ -190,7 +208,7 @@ module dcache_top (
         .clk(clk),
         .waddr(index),
         .raddr(index),
-        .wen(current_state == WAIT_CPU && way_hits[i]),
+        .wen((current_state == WAIT_CPU) && way_hits[i]),
         .rst(rst),
         .wdata(lru_timestamp_counter), // write last hit time
         .rdata(way_last_hit[i])
@@ -212,7 +230,7 @@ module dcache_top (
   always @(posedge clk) begin
     if (rst)
       lru_timestamp_counter <= `TIME_WIDTH'b0;
-    else if (current_state == WAIT_CPU && from_cpu_mem_req_valid && hit && lru_timestamp_counter != 32'hffff_ffff)
+    else if ((current_state == WAIT_CPU) && from_cpu_mem_req_valid && hit && lru_timestamp_counter != 32'hffff_ffff)
       lru_timestamp_counter <= lru_timestamp_counter + 1;
   end
 
@@ -220,9 +238,9 @@ module dcache_top (
   // write to memory
   reg [3:0] write_counts;
   always @(posedge clk) begin
-    if (rst || current_state == WAIT_CPU)
+    if (rst || (current_state == WAIT_CPU))
       write_counts <= 4'b0;
-    else if ((current_state == WRW || current_state == SYNC) && from_mem_wr_data_ready)
+    else if (((current_state == WRW) || (current_state == SYNC)) && from_mem_wr_data_ready)
       write_counts <= write_counts + 1;
   end
 
@@ -230,9 +248,9 @@ module dcache_top (
   always @(posedge clk) begin
     if (rst)
       sync_reg <= `LINE_LEN'b0;
-    else if (current_state == MISS_DT && from_mem_wr_req_ready)
+    else if ((current_state == MISS_DT) && from_mem_wr_req_ready)
       sync_reg <= way_rdata[replaced_way];
-    else if (current_state == SYNC && from_mem_wr_data_ready)
+    else if ((current_state == SYNC) && from_mem_wr_data_ready)
       sync_reg <= {`DATA_WIDTH'b0, sync_reg[`LINE_LEN - 1 : `DATA_WIDTH]};
   end
 
@@ -251,7 +269,9 @@ module dcache_top (
       assign way_wen_at_hit[i] = way_hits[i] && from_cpu_mem_req_valid && (current_state == W_HIT);
       assign way_wen_at_refill[i] = (replaced_way == i) && (current_state == REFILL) && (from_mem_rd_rsp_valid); // only enable write when mem rsp is valid!
       assign way_wen[i] = way_wen_at_hit[i] || way_wen_at_refill[i]; // write enable for the way that was hit or refilled
-      assign way_wdata[i] = (way_wen_at_hit[i]) ? (~(mask << {offset[`OFFSET_WIDTH - 1:2], 5'b0}) & way_rdata[i]) | ((from_cpu_mem_req_wdata & mask) << {offset[`OFFSET_WIDTH - 1:2], 5'b0}) :
+      assign way_wdata[i] = (way_wen_at_hit[i]) ? (
+                            (~(mask << {offset[`OFFSET_WIDTH - 1:2], 5'b0}) & way_rdata[i]) | ((from_cpu_mem_req_wdata & mask) << {offset[`OFFSET_WIDTH - 1:2], 5'b0})
+                            ) :
                             (way_wen_at_refill[i]) ? ({from_mem_rd_rsp_data, way_rdata[i][`LINE_LEN - 1 : `DATA_WIDTH]}) :
                             256'b0;
     end
@@ -270,23 +290,6 @@ module dcache_top (
   assign miss = from_cpu_mem_req_valid && !hit; // miss if request is valid and no hit
   assign dirty = way_dirty[replaced_way]; // dirty if the way that was hit is dirty
 
-  // FSM implementation
-  localparam INIT = 1,
-             WAIT_CPU = 2,
-             MISS_DT = 3,
-             MISS_CL = 4,
-             SYNC = 5,
-             REFILL = 6,
-             W_HIT = 7,
-             R_HIT = 8,
-             SEND_CPU_DATA = 9,
-             W_BP = 10,
-             R_BP = 11,
-             WRW = 12,
-             RDW = 13;
-
-  reg  [3:0] current_state;
-  reg  [3:0] next_state;
 
   always @(posedge clk) begin
     if (rst) begin
@@ -297,7 +300,7 @@ module dcache_top (
   end
 
 
-  assign Bypass = ~|(from_cpu_mem_req_addr & `NO_CACHE_MASK) || |(from_cpu_mem_req_addr & `IO_SPACE_MASK); // Bypass if address is in I/O space
+  assign Bypass = (~|(from_cpu_mem_req_addr & `NO_CACHE_MASK)) || (|(from_cpu_mem_req_addr & `IO_SPACE_MASK)); // Bypass if address is in I/O space
   assign r_done = from_mem_rd_rsp_valid && from_mem_rd_rsp_last; // Read done when memory response is valid and last beat
 
   always @(*) begin
@@ -366,10 +369,10 @@ module dcache_top (
   // handshake signals between cache and CPU
   // assign to_cpu_mem_req_ready = (current_state == WAIT_CPU); // naive logic,
   // can be optimized
-  assign to_cpu_mem_req_ready = (current_state == WRW && w_done) ||  // could this be W_BP?
+  assign to_cpu_mem_req_ready = ((current_state == WRW) && w_done) ||  // could this be W_BP?
       (current_state == R_BP) || (current_state == W_HIT) || (current_state == R_HIT);
 
-  assign to_cpu_cache_rsp_valid = (current_state == SEND_CPU_DATA) || (current_state == RDW && r_done);
+  assign to_cpu_cache_rsp_valid = (current_state == SEND_CPU_DATA) || ((current_state == RDW) && r_done);
 
   assign to_cpu_cache_rsp_data = (current_state == RDW) ? from_mem_rd_rsp_data :
                                  (current_state == SEND_CPU_DATA) ? way_rdata[hit_way_index][{offset[`OFFSET_WIDTH - 1 : 2], 5'b0} +: `DATA_WIDTH] :
@@ -398,8 +401,8 @@ module dcache_top (
   assign to_mem_wr_data_strb = (current_state == WRW) ? from_cpu_mem_req_wstrb :
                                (current_state == SYNC) ? 4'b1111 : 4'b0; // 4'b1111 for cache write-back
   assign to_mem_wr_data_valid = (current_state == WRW) || (current_state == SYNC);
-  assign to_mem_wr_data_last = (current_state == WRW && write_counts == 4'b0000) || 
-                               (current_state == SYNC && write_counts == 4'b0111); // Last beat for write
+  assign to_mem_wr_data_last = ((current_state == WRW) && (write_counts == 4'b0000)) || 
+                               ((current_state == SYNC) && (write_counts == 4'b0111)); // Last beat for write
 
 endmodule
 
