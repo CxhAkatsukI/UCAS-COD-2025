@@ -362,6 +362,9 @@ module custom_cpu (
     //--------------------------------------------------------------------------
     // Instantiate Pipeline Stage Modules
     //--------------------------------------------------------------------------
+    wire ifu_IRWrite_out;
+    wire ifu_IF_stall_out;
+    wire ifu_IW_stall_out;
     ifu ifu_inst (
         .clk                    (clk),
         .rst                    (rst),
@@ -387,6 +390,9 @@ module custom_cpu (
 
     assign pc_value_at_fetch_time = PC; // Capture PC at fetch time
 
+    wire idu_is_branch_out;
+    wire idu_is_jump_out;
+    wire idu_is_nop_out;
     idu idu_inst (
         .clk            (clk),
         .rst            (rst),
@@ -433,6 +439,7 @@ module custom_cpu (
         .shift_result (exu_shift_result_out)  // To EX/MEM reg & FWDU
     );
 
+    wire memu_RDW_stall_out;
     memu memu_inst (
         .clk                    (clk),
         .rst                    (rst),
@@ -626,6 +633,7 @@ module ifu (
   end
 
   // -- FSM Output Logic --
+  wire pc_write_enable;
   assign IRWrite = (current_state == IW) && Inst_Valid;
   assign Inst_Req_Valid = (current_state == IF); // Request instruction fetch
   assign Inst_Ready = (current_state == INIT) || (current_state == IW);
@@ -785,7 +793,7 @@ module idu (
   assign      is_jalr  = (opcode == 7'b1100111); // JALR instruction
   assign      is_lui   = (opcode == 7'b0110111); // LUI instruction
   assign      is_auipc = (opcode == 7'b0010111); // AUIPC instruction
-  assign      is_nop   = (IR    == 8'h00000013); // NOP instruction
+  assign      is_nop   = (IR    == 32'h00000013); // NOP instruction
 
   // -- Control Signals for Instruction Types --
   assign      is_I     = is_OPIMM || is_load || is_jalr; // I-type instruction
@@ -813,9 +821,9 @@ module idu (
                                         32'b0;         // Default to zero
 
   assign shifter_src1 = RF_rdata1;                        // Source for shift operations is always rs1
-  assign shifter_src2 = (is_R) ? RF_rdata2[4:0] :         // R-type shifts use lower 5 bits of rs2
-                        (is_I) ? imm[4:0]       :         // I-type shifts use lower 5 bits of immediate (shamt)
-                                 5'b0;                    // Default
+  assign shifter_src2 = (is_R) ? RF_rdata2      :         // R-type shifts use lower 5 bits of rs2
+                        (is_I) ? imm            :         // I-type shifts use lower 5 bits of immediate (shamt)
+                                 32'b0;                    // Default
 
   // Control Signals for ALU and Shifter
   wire funct7_5 = funct7[5]; // Bit 5 of funct7 (differentiates ADD/SUB, SRL/SRA)
@@ -976,7 +984,7 @@ module exu (
 
   shifter instance_shifter (
       .A          (shifter_src1),         // Input Data from Src Sel
-      .B          (shifter_src2),         // Input Shift Amount from Src Sel
+      .B          (shifter_src2[4:0]),         // Input Shift Amount from Src Sel
       .Shiftop    (shifter_op),           // Input Opcode from ID
       .Result     (shift_result)          // Output: Shifter result -> To WB
   );

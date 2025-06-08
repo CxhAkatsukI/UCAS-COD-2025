@@ -270,7 +270,7 @@ module dcache_top (
       assign way_wen_at_refill[i] = (replaced_way == i) && (current_state == REFILL) && (from_mem_rd_rsp_valid); // only enable write when mem rsp is valid!
       assign way_wen[i] = way_wen_at_hit[i] || way_wen_at_refill[i]; // write enable for the way that was hit or refilled
       assign way_wdata[i] = (way_wen_at_hit[i]) ? (
-                            (~(mask << {offset[`OFFSET_WIDTH - 1:2], 5'b0}) & way_rdata[i]) | ((from_cpu_mem_req_wdata & mask) << {offset[`OFFSET_WIDTH - 1:2], 5'b0})
+                            (~({{(`LINE_LEN - `DATA_WIDTH){1'b0}}, mask} << {offset[`OFFSET_WIDTH - 1:2], 5'b0}) & way_rdata[i]) | ({{(`LINE_LEN - `DATA_WIDTH){1'b0}}, (from_cpu_mem_req_wdata & mask)} << {offset[`OFFSET_WIDTH - 1:2], 5'b0})
                             ) :
                             (way_wen_at_refill[i]) ? ({from_mem_rd_rsp_data, way_rdata[i][`LINE_LEN - 1 : `DATA_WIDTH]}) :
                             256'b0;

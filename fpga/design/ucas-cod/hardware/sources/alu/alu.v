@@ -14,11 +14,11 @@ module alu (
 wire is_sub = (ALUop == 3'b110 | ALUop == 3'b111 | ALUop == 3'b011) ? 1'b1 : 1'b0;
 
 wire [32:0] sel_B = 
-    (ALUop == 3'b010) ? B :
-    (ALUop == 3'b110 | ALUop == 3'b111 | ALUop == 3'b011) ? ~B :
-    1'b0;
+    (ALUop == 3'b010) ? {1'b0, B} :
+    (ALUop == 3'b110 | ALUop == 3'b111 | ALUop == 3'b011) ? {1'b1, ~B} :
+    33'b0;
 
-wire [`DATA_WIDTH:0] add_result = A + sel_B + is_sub;
+wire [`DATA_WIDTH:0] add_result = A + sel_B + {32'b0, is_sub};
 wire [`DATA_WIDTH:0] sub_result = add_result;
 
 

@@ -23,7 +23,7 @@ module custom_array #(
     always @(posedge clk) begin
         if (rst) begin
           for (i = 0; i < (1 << `TARRAY_ADDR_WIDTH); i = i + 1)
-            array[i] <= 1'b0;
+            array[i] <= {TARRAY_DATA_WIDTH{1'b0}};
         end else if (wen)
             array[waddr] <= wdata;
     end

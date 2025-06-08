@@ -21,7 +21,7 @@ module reg_file (
       data_array[waddr] <= wdata;
     end
   end
-  assign rdata1 = (raddr1 == {`ADDR_WIDTH{1'b0}} ? {`ADDR_WIDTH{1'b0}} : data_array[raddr1]);
-  assign rdata2 = (raddr2 == {`ADDR_WIDTH{1'b0}} ? {`ADDR_WIDTH{1'b0}} : data_array[raddr2]);
+  assign rdata1 = (raddr1 == {`ADDR_WIDTH{1'b0}} ? {`DATA_WIDTH{1'b0}} : data_array[raddr1]);
+  assign rdata2 = (raddr2 == {`ADDR_WIDTH{1'b0}} ? {`DATA_WIDTH{1'b0}} : data_array[raddr2]);
 
 endmodule
