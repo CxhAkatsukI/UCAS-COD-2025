@@ -18,10 +18,11 @@ module custom_array #(
 
     // The size of the array elements will now depend on the TARRAY_DATA_WIDTH parameter
     reg [TARRAY_DATA_WIDTH - 1 : 0] array [(1 << `TARRAY_ADDR_WIDTH) - 1 : 0];
+    integer i;
 
     always @(posedge clk) begin
         if (rst) begin
-          for (integer i = 0; i < (1 << `TARRAY_ADDR_WIDTH); i = i + 1)
+          for (i = 0; i < (1 << `TARRAY_ADDR_WIDTH); i = i + 1)
             array[i] <= 1'b0;
         end else if (wen)
             array[waddr] <= wdata;
