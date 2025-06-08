@@ -358,7 +358,7 @@ module dcache_top (
         next_state = (w_done) ? WAIT_CPU : WRW;  // Wait for write to complete
       end
       RDW: begin
-        next_state = (r_done) ? SEND_CPU_DATA : RDW;  // Wait for read to complete
+        next_state = (r_done) ? WAIT_CPU : RDW;  // Wait for read to complete
       end
       default: begin
         next_state = WAIT_CPU;  // Default case to handle unexpected states
