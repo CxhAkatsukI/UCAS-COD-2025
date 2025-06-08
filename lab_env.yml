@@ -6,6 +6,6 @@ variables:
   CPU_ISA: "riscv32"
 
   # CPU frequency must be a decimal value
-  CPU_FREQ: 100
+  CPU_FREQ: 200
 
   SIM_DUT_TYPE: "turbo"
