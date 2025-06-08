@@ -406,9 +406,9 @@ module dcache_top (
 
 endmodule
 
-
+`define MAX_32_BIT 32'hffff_ffff
 module replacement (
-    // input clk, rst, // Not needed if purely combinational and 'full'/'random' is removed
+    input clk, rst, // Not needed if purely combinational and 'full'/'random' is removed
     input  [`TIME_WIDTH - 1 : 0] data_0,
     data_1,
     data_2,
@@ -418,41 +418,65 @@ module replacement (
     output [                2:0] replaced_way
 );
 
-  // Find the index of the way with the smallest timestamp.
-  // In case of a tie, this implementation picks the way with the highest index among tied ways.
-  // To pick the smallest index in a tie, change '<' to '<='.
-  reg [2:0] r_way;
-  reg [`TIME_WIDTH-1:0] min_val_internal;  // Temporary for comparison
+    wire         full;
+    reg  [2 : 0] random_num;
 
-  // Use an always_comb block for SystemVerilog, or assign for Verilog-2001
-  // For Verilog-2001, you might need to expand this into assigns or a function
-  always @* begin : find_lru_way
-    min_val_internal = data_0;
-    r_way = 3'd0;
+    assign full = (data_0 == `MAX_32_BIT) && (data_1 == `MAX_32_BIT) &&
+                  (data_2 == `MAX_32_BIT) && (data_3 == `MAX_32_BIT) &&
+                  (data_4 == `MAX_32_BIT) && (data_5 == `MAX_32_BIT);
 
-    if (data_1 < min_val_internal) begin
-      min_val_internal = data_1;
-      r_way = 3'd1;
+    always @(posedge clk) begin
+        if (rst)
+            random_num <= 3'b0;
+        else if (random_num == 3'h5)
+            random_num <= 3'h0;
+        else
+            random_num <= random_num + 1;
     end
-    if (data_2 < min_val_internal) begin
-      min_val_internal = data_2;
-      r_way = 3'd2;
-    end
-    if (data_3 < min_val_internal) begin
-      min_val_internal = data_3;
-      r_way = 3'd3;
-    end
-    if (data_4 < min_val_internal) begin
-      min_val_internal = data_4;
-      r_way = 3'd4;
-    end
-    if (data_5 < min_val_internal) begin
-      // min_val_internal = data_5; // Not strictly needed for the final r_way
-      r_way = 3'd5;
-    end
-  end
 
-  assign replaced_way = r_way;
+    wire le_01, le_02, le_03, le_04, le_05,
+         le_12, le_13, le_14, le_15, le_23,
+         le_24, le_25, le_34, le_35, le_45;
+
+    reg  least_0, least_1, least_2,
+         least_3, least_4, least_5;
+
+    assign le_01 = (data_0 < data_1);
+    assign le_02 = (data_0 < data_2);
+    assign le_03 = (data_0 < data_3);
+    assign le_04 = (data_0 < data_4);
+    assign le_05 = (data_0 < data_5);
+    assign le_12 = (data_1 < data_2);
+    assign le_13 = (data_1 < data_3);
+    assign le_14 = (data_1 < data_4);
+    assign le_15 = (data_1 < data_5);
+    assign le_23 = (data_2 < data_3);
+    assign le_24 = (data_2 < data_4);
+    assign le_25 = (data_2 < data_5);
+    assign le_34 = (data_3 < data_4);
+    assign le_35 = (data_3 < data_5);
+    assign le_45 = (data_4 < data_5);
+
+
+    always @(posedge clk) begin
+        least_0 <=  le_01 &&  le_02 &&  le_03 &&  le_04 &&  le_05;
+        least_1 <= !le_01 &&  le_12 &&  le_13 &&  le_14 &&  le_15;
+        least_2 <= !le_02 && !le_12 &&  le_23 &&  le_24 &&  le_25;
+        least_3 <= !le_03 && !le_13 && !le_23 &&  le_34 &&  le_35;
+        least_4 <= !le_04 && !le_14 && !le_24 && !le_34 &&  le_45;
+        least_5 <= !le_05 && !le_15 && !le_25 && !le_35 && !le_45;
+    end
+
+
+    assign replaced_way = {
+        ({3{ full           }} & random_num) |
+        ({3{!full && least_0}} &       3'h0) |
+        ({3{!full && least_1}} &       3'h1) |
+        ({3{!full && least_2}} &       3'h2) |
+        ({3{!full && least_3}} &       3'h3) |
+        ({3{!full && least_4}} &       3'h4) |
+        ({3{!full && least_5}} &       3'h5)
+    };
 
 endmodule
 
