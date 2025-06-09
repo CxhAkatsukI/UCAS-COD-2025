@@ -410,16 +410,72 @@ endmodule
 
 `define MAX_32_BIT 32'hffff_ffff
 module replacement (
-    input clk, rst, // Not needed for purely combinational logic
-    input  [`TIME_WIDTH - 1 : 0] data_0,
-                                 data_1,
-                                 data_2,
-                                 data_3,
-                                 data_4,
-                                 data_5,
-    output [                2:0] replaced_way
+    input                        clk,
+    input                        rst,
+    input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
+                                 data_3, data_4, data_5,
+    output [              2 : 0] replaced_way
 );
-reg [2:0] random_num;
-  assign replaced_way = 0;
-endmodule
 
+
+    wire         full;
+    reg  [2 : 0] random_num;
+
+    assign full = (data_0 == `MAX_32_BIT) && (data_1 == `MAX_32_BIT) &&
+                  (data_2 == `MAX_32_BIT) && (data_3 == `MAX_32_BIT) &&
+                  (data_4 == `MAX_32_BIT) && (data_5 == `MAX_32_BIT);
+
+    always @(posedge clk) begin
+        if (rst)
+            random_num <= 3'b0;
+        else if (random_num == 3'h5)
+            random_num <= 3'h0;
+        else
+            random_num <= random_num + 1;
+    end
+
+    wire le_01, le_02, le_03, le_04, le_05,
+         le_12, le_13, le_14, le_15, le_23,
+         le_24, le_25, le_34, le_35, le_45;
+
+    reg  least_0, least_1, least_2,
+         least_3, least_4, least_5;
+
+    assign le_01 = (data_0 < data_1);
+    assign le_02 = (data_0 < data_2);
+    assign le_03 = (data_0 < data_3);
+    assign le_04 = (data_0 < data_4);
+    assign le_05 = (data_0 < data_5);
+    assign le_12 = (data_1 < data_2);
+    assign le_13 = (data_1 < data_3);
+    assign le_14 = (data_1 < data_4);
+    assign le_15 = (data_1 < data_5);
+    assign le_23 = (data_2 < data_3);
+    assign le_24 = (data_2 < data_4);
+    assign le_25 = (data_2 < data_5);
+    assign le_34 = (data_3 < data_4);
+    assign le_35 = (data_3 < data_5);
+    assign le_45 = (data_4 < data_5);
+
+
+    always @(posedge clk) begin
+        least_0 <=  le_01 &&  le_02 &&  le_03 &&  le_04 &&  le_05;
+        least_1 <= !le_01 &&  le_12 &&  le_13 &&  le_14 &&  le_15;
+        least_2 <= !le_02 && !le_12 &&  le_23 &&  le_24 &&  le_25;
+        least_3 <= !le_03 && !le_13 && !le_23 &&  le_34 &&  le_35;
+        least_4 <= !le_04 && !le_14 && !le_24 && !le_34 &&  le_45;
+        least_5 <= !le_05 && !le_15 && !le_25 && !le_35 && !le_45;
+    end
+
+
+    assign replaced_way = {
+        ({3{ full           }} & random_num) |
+        ({3{!full && least_0}} &       3'h0) |
+        ({3{!full && least_1}} &       3'h1) |
+        ({3{!full && least_2}} &       3'h2) |
+        ({3{!full && least_3}} &       3'h3) |
+        ({3{!full && least_4}} &       3'h4) |
+        ({3{!full && least_5}} &       3'h5)
+    };
+
+endmodule
