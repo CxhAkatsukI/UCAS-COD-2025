@@ -216,7 +216,7 @@ module dcache_top (
     end
   endgenerate
 
-  replacement lru_replacement (
+  replacement_simple lru_replacement (
     .clk(clk),
     .rst(rst),
     .data_0(way_last_hit[0]),
@@ -478,4 +478,15 @@ module replacement (
         ({3{!full && least_5}} &       3'h5)
     };
 
+endmodule
+
+module replacement_simple (
+    input                        clk,
+    input                        rst,
+    input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
+                                 data_3, data_4, data_5,
+    output [              2 : 0] replaced_way
+);
+
+assign replaced_way = 0;
 endmodule
