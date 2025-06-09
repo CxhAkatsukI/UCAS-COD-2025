@@ -217,6 +217,8 @@ module dcache_top (
   endgenerate
 
   replacement lru_replacement (
+    .clk(clk),
+    .rst(rst),
     .data_0(way_last_hit[0]),
     .data_1(way_last_hit[1]),
     .data_2(way_last_hit[2]),
