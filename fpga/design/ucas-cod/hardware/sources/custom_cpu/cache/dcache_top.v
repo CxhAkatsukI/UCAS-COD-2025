@@ -410,75 +410,48 @@ endmodule
 
 `define MAX_32_BIT 32'hffff_ffff
 module replacement (
-    input clk, rst, // Not needed if purely combinational and 'full'/'random' is removed
+    input clk, rst,
     input  [`TIME_WIDTH - 1 : 0] data_0,
-    data_1,
-    data_2,
-    data_3,
-    data_4,
-    data_5,
+                                 data_1,
+                                 data_2,
+                                 data_3,
+                                 data_4,
+                                 data_5,
     output [                2:0] replaced_way
 );
 
-    wire         full;
-    reg  [2 : 0] random_num;
+  // --- Stage 1: Pairwise comparisons ---
+  // Compare data_0 and data_1
+  wire [`TIME_WIDTH - 1 : 0] min_val_01;
+  wire [2:0] way_01;
+  assign min_val_01 = (data_0 <= data_1) ? data_0 : data_1; // If equal, pick data_0
+  assign way_01     = (data_0 <= data_1) ? 3'd0   : 3'd1;   // If equal, pick way 0
 
-    assign full = (data_0 == `MAX_32_BIT) && (data_1 == `MAX_32_BIT) &&
-                  (data_2 == `MAX_32_BIT) && (data_3 == `MAX_32_BIT) &&
-                  (data_4 == `MAX_32_BIT) && (data_5 == `MAX_32_BIT);
+  // Compare data_2 and data_3
+  wire [`TIME_WIDTH - 1 : 0] min_val_23;
+  wire [2:0] way_23;
+  assign min_val_23 = (data_2 <= data_3) ? data_2 : data_3; // If equal, pick data_2
+  assign way_23     = (data_2 <= data_3) ? 3'd2   : 3'd3;   // If equal, pick way 2
 
-    always @(posedge clk) begin
-        if (rst)
-            random_num <= 3'b0;
-        else if (random_num == 3'h5)
-            random_num <= 3'h0;
-        else
-            random_num <= random_num + 1;
-    end
+  // Compare data_4 and data_5
+  wire [`TIME_WIDTH - 1 : 0] min_val_45;
+  wire [2:0] way_45;
+  assign min_val_45 = (data_4 <= data_5) ? data_4 : data_5; // If equal, pick data_4
+  assign way_45     = (data_4 <= data_5) ? 3'd4   : 3'd5;   // If equal, pick way 4
 
-    wire le_01, le_02, le_03, le_04, le_05,
-         le_12, le_13, le_14, le_15, le_23,
-         le_24, le_25, le_34, le_35, le_45;
+  // --- Stage 2: Compare results of Stage 1 ---
+  // Compare (min_val_01, way_01) with (min_val_23, way_23)
+  wire [`TIME_WIDTH - 1 : 0] min_val_0123;
+  wire [2:0] way_0123;
+  assign min_val_0123 = (min_val_01 <= min_val_23) ? min_val_01 : min_val_23; // If equal, pick min_val_01 (associated with smaller original indices)
+  assign way_0123     = (min_val_01 <= min_val_23) ? way_01     : way_23;     // If equal, pick way_01
 
-    reg  least_0, least_1, least_2,
-         least_3, least_4, least_5;
-
-    assign le_01 = (data_0 < data_1);
-    assign le_02 = (data_0 < data_2);
-    assign le_03 = (data_0 < data_3);
-    assign le_04 = (data_0 < data_4);
-    assign le_05 = (data_0 < data_5);
-    assign le_12 = (data_1 < data_2);
-    assign le_13 = (data_1 < data_3);
-    assign le_14 = (data_1 < data_4);
-    assign le_15 = (data_1 < data_5);
-    assign le_23 = (data_2 < data_3);
-    assign le_24 = (data_2 < data_4);
-    assign le_25 = (data_2 < data_5);
-    assign le_34 = (data_3 < data_4);
-    assign le_35 = (data_3 < data_5);
-    assign le_45 = (data_4 < data_5);
-
-
-    always @(posedge clk) begin
-        least_0 <=  le_01 &&  le_02 &&  le_03 &&  le_04 &&  le_05;
-        least_1 <= !le_01 &&  le_12 &&  le_13 &&  le_14 &&  le_15;
-        least_2 <= !le_02 && !le_12 &&  le_23 &&  le_24 &&  le_25;
-        least_3 <= !le_03 && !le_13 && !le_23 &&  le_34 &&  le_35;
-        least_4 <= !le_04 && !le_14 && !le_24 && !le_34 &&  le_45;
-        least_5 <= !le_05 && !le_15 && !le_25 && !le_35 && !le_45;
-    end
-
-
-    assign replaced_way = {
-        ({3{ full           }} & random_num) |
-        ({3{!full && least_0}} &       3'h0) |
-        ({3{!full && least_1}} &       3'h1) |
-        ({3{!full && least_2}} &       3'h2) |
-        ({3{!full && least_3}} &       3'h3) |
-        ({3{!full && least_4}} &       3'h4) |
-        ({3{!full && least_5}} &       3'h5)
-    };
+  // --- Stage 3 (Final Stage): Compare results of Stage 2 with remaining from Stage 1 ---
+  // Compare (min_val_0123, way_0123) with (min_val_45, way_45)
+  // The final minimum value isn't strictly needed for the output 'replaced_way'
+  // wire [`TIME_WIDTH - 1 : 0] final_min_val;
+  // assign final_min_val = (min_val_0123 <= min_val_45) ? min_val_0123 : min_val_45;
+  assign replaced_way  = (min_val_0123 <= min_val_45) ? way_0123     : way_45;     // If equal, pick way_0123
 
 endmodule
 
