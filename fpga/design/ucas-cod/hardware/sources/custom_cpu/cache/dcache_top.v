@@ -3,7 +3,7 @@
 `define CACHE_SET 8
 `define CACHE_WAY 6
 `define DATA_WIDTH 32
-`define TIME_WIDTH 8
+`define TIME_WIDTH 16
 `define TAG_LEN 24
 `define INDEX_WIDTH 3
 `define LINE_LEN 256
