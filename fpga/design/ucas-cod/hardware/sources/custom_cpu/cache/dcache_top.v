@@ -3,7 +3,7 @@
 `define CACHE_SET 8
 `define CACHE_WAY 6
 `define DATA_WIDTH 32
-`define TIME_WIDTH 32
+`define TIME_WIDTH 16
 `define TAG_LEN 24
 `define INDEX_WIDTH 3
 `define LINE_LEN 256
@@ -216,7 +216,7 @@ module dcache_top (
     end
   endgenerate
 
-  replacement_simple lru_replacement (
+  replacement lru_replacement (
     .clk(clk),
     .rst(rst),
     .data_0(way_last_hit[0]),
