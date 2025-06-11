@@ -58,15 +58,15 @@ module icache_top (
              SYNC = 13'b00000_0001_0000,
              REFILL = 13'b00000_0010_0000,
              W_HIT = 13'b00000_0100_0000,
-             R_HIT = 13'b00000_1000_0000,
+             LOOKUP = 13'b00000_1000_0000,
              SEND_CPU_DATA = 13'b00001_0000_0000,
              W_BP = 13'b00010_0000_0000,
              R_BP = 13'b00100_0000_0000,
              WRW = 13'b01000_0000_0000,
              RDW = 13'b10000_0000_0000;
 
-  reg  [12:0] current_state;
-  reg  [12:0] next_state;
+  reg  [               12:0] current_state;
+  reg  [               12:0] next_state;
 
   // decode the CPU request address
   wire [     `TAG_LEN - 1:0] tag;
@@ -80,23 +80,23 @@ module icache_top (
   // information from cache blocks (and related control/status signals)
 
   // Arrays of single-bit signals (for each way)
-  wire way_valids        [`CACHE_WAY - 1:0]; // valid bits for each way (Correct as is)
-  wire way_wen           [`CACHE_WAY - 1:0]; // write enable for each way (Correct as is)
-  wire way_wen_at_refill [`CACHE_WAY - 1:0]; // write enable for refill (Correct as is)
-  wire way_hits          [`CACHE_WAY - 1:0]; // hit signals for each way (Correct as is)
+  wire way_valids[`CACHE_WAY - 1:0];  // valid bits for each way (Correct as is)
+  wire way_wen[`CACHE_WAY - 1:0];  // write enable for each way (Correct as is)
+  wire way_wen_at_refill[`CACHE_WAY - 1:0];  // write enable for refill (Correct as is)
+  wire way_hits[`CACHE_WAY - 1:0];  // hit signals for each way (Correct as is)
 
   // Arrays where each element is a multi-bit vector (for each way)
   // Syntax: wire [ELEMENT_WIDTH - 1:0] array_name [ARRAY_SIZE - 1:0];
-  wire [`TAG_LEN    - 1:0] way_tags     [`CACHE_WAY - 1:0]; // tags for each way
-  wire [`LINE_LEN   - 1:0] way_rdata    [`CACHE_WAY - 1:0]; // data read from each way
+  wire [`TAG_LEN    - 1:0] way_tags[`CACHE_WAY - 1:0];  // tags for each way
+  wire [`LINE_LEN   - 1:0] way_rdata[`CACHE_WAY - 1:0];  // data read from each way
   wire [`LINE_LEN   - 1:0] way_wdata    [`CACHE_WAY - 1:0]; // data to be written to each way (calculated value)
-  wire [`TIME_WIDTH - 1:0] way_last_hit [`CACHE_WAY - 1:0]; // last hit time for each way
+  wire [`TIME_WIDTH - 1:0] way_last_hit[`CACHE_WAY - 1:0];  // last hit time for each way
 
   // Single multi-bit signals (vectors) or registers
   // These are NOT arrays of ways, but single values.
   reg  [`TIME_WIDTH - 1:0]  lru_timestamp_counter; // timestamp for LRU (should be reg as it's assigned in always@posedge)
-  wire [2:0]                hit_way_index;       // index of the way that was hit (vector, not array)
-  wire [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
+  wire [2:0] hit_way_index;  // index of the way that was hit (vector, not array)
+  wire [2:0] replaced_way;  // index of the way that was replaced (vector, not array)
 
   // define the wires that drive the FSM transitions
   wire hit, miss;
@@ -107,71 +107,70 @@ module icache_top (
   generate
     for (i = 0; i < `CACHE_WAY; i = i + 1) begin
       custom_array #(
-        .TARRAY_DATA_WIDTH(1)
+          .TARRAY_DATA_WIDTH(1)
       ) valid_array (
-        .clk(clk),
-        .waddr(index),
-        .raddr(index),
-        .wen(way_wen[i]),
-        .rst(rst),
-        .wdata(1'b1), // write valid bit
-        .rdata(way_valids[i])
+          .clk(clk),
+          .waddr(index),
+          .raddr(index),
+          .wen(way_wen[i]),
+          .rst(rst),
+          .wdata(1'b1),  // write valid bit
+          .rdata(way_valids[i])
       );
 
-     custom_array #(
-        .TARRAY_DATA_WIDTH(`TAG_LEN)
+      custom_array #(
+          .TARRAY_DATA_WIDTH(`TAG_LEN)
       ) tag_array (
-        .clk(clk),
-        .waddr(index),
-        .raddr(index),
-        .wen(way_wen[i]),
-        .rst(rst),
-        .wdata(tag), // write tag
-        .rdata(way_tags[i])
+          .clk(clk),
+          .waddr(index),
+          .raddr(index),
+          .wen(way_wen[i]),
+          .rst(rst),
+          .wdata(tag),  // write tag
+          .rdata(way_tags[i])
       );
 
       custom_array #(
-        .TARRAY_DATA_WIDTH(`LINE_LEN)
+          .TARRAY_DATA_WIDTH(`LINE_LEN)
       ) data_array (
-        .clk(clk),
-        .waddr(index),
-        .raddr(index),
-        .wen(way_wen[i]),
-        .rst(rst),
-        .wdata(way_wdata[i]), // write data
-        .rdata(way_rdata[i])
+          .clk  (clk),
+          .waddr(index),
+          .raddr(index),
+          .wen  (way_wen[i]),
+          .rst  (rst),
+          .wdata(way_wdata[i]),  // write data
+          .rdata(way_rdata[i])
       );
 
       custom_array #(
-        .TARRAY_DATA_WIDTH(`TIME_WIDTH)
+          .TARRAY_DATA_WIDTH(`TIME_WIDTH)
       ) last_hit_array (
-        .clk(clk),
-        .waddr(index),
-        .raddr(index),
-        .wen(current_state == WAIT_CPU && way_hits[i]),
-        .rst(rst),
-        .wdata(lru_timestamp_counter), // write last hit time
-        .rdata(way_last_hit[i])
+          .clk(clk),
+          .waddr(index),
+          .raddr(index),
+          .wen(current_state == WAIT_CPU && way_hits[i]),
+          .rst(rst),
+          .wdata(lru_timestamp_counter),  // write last hit time
+          .rdata(way_last_hit[i])
       );
     end
   endgenerate
 
   replacement lru_replacement (
-    .clk(clk),
-    .rst(rst),
-    .data_0(way_last_hit[0]),
-    .data_1(way_last_hit[1]),
-    .data_2(way_last_hit[2]),
-    .data_3(way_last_hit[3]),
-    .data_4(way_last_hit[4]),
-    .data_5(way_last_hit[5]),
-    .replaced_way(replaced_way)
+      .clk(clk),
+      .rst(rst),
+      .data_0(way_last_hit[0]),
+      .data_1(way_last_hit[1]),
+      .data_2(way_last_hit[2]),
+      .data_3(way_last_hit[3]),
+      .data_4(way_last_hit[4]),
+      .data_5(way_last_hit[5]),
+      .replaced_way(replaced_way)
   );
 
   // generate the lru_timestamp_counter
   always @(posedge clk) begin
-    if (rst)
-      lru_timestamp_counter <= `TIME_WIDTH'b0;
+    if (rst) lru_timestamp_counter <= `TIME_WIDTH'b0;
     else if (current_state == WAIT_CPU && from_cpu_inst_req_valid && hit && lru_timestamp_counter != 32'hffff_ffff)
       lru_timestamp_counter <= lru_timestamp_counter + 1;
   end
@@ -197,7 +196,7 @@ module icache_top (
                (way_hits[4]) ? 3'h4 :
                (way_hits[5]) ? 3'h5 :
                                3'b0; // index of the way that was hit
-  assign miss = from_cpu_inst_req_valid && !hit; // miss if request is valid and no hit
+  assign miss = from_cpu_inst_req_valid && !hit;  // miss if request is valid and no hit
 
   always @(posedge clk) begin
     if (rst) begin
@@ -216,29 +215,24 @@ module icache_top (
       end
       WAIT_CPU: begin
         if (from_cpu_inst_req_valid) begin
-          if (hit) begin
-            next_state = R_HIT;  // Write or Read hit
-          end else if (miss) begin
-            next_state = MISS_CL;  // Write miss or Read miss
-          end else begin
-            next_state = WAIT_CPU;  // If no conditions met, stay in WAIT_CPU (should not happen)
-          end
+          next_state = LOOKUP;  // If CPU request is valid, go to lookup state
         end else begin
           next_state = WAIT_CPU;
         end
       end
-      R_HIT: begin
-        next_state = SEND_CPU_DATA;  // After read hit, send data as well as handshake signals to CPU
-      end
-      SEND_CPU_DATA: begin
-        next_state = (from_cpu_cache_rsp_ready) ? WAIT_CPU : SEND_CPU_DATA;  // Wait for CPU to be ready to receive data
+      LOOKUP: begin
+        if (!hit) begin
+          next_state = MISS_CL;
+        end else if (from_cpu_cache_rsp_ready) begin
+          next_state = WAIT_CPU;
+        end
       end
       MISS_CL: begin
         next_state = (from_mem_rd_req_ready) ? REFILL : MISS_CL;  // Wait for memory read request to be ready
       end
       REFILL: begin
         if (r_done) begin
-          next_state = R_HIT;  // After refill, go to hit state
+          next_state = LOOKUP;  // After refill, go to hit state
         end else begin
           next_state = REFILL;  // Continue refilling if not done
         end
@@ -252,11 +246,11 @@ module icache_top (
   // handshake signals between cache and CPU
   // assign to_cpu_mem_req_ready = (current_state == WAIT_CPU); // naive logic,
   // can be optimized
-  assign to_cpu_inst_req_ready = (current_state == R_HIT);
+  assign to_cpu_inst_req_ready = (current_state == WAIT_CPU);
 
-  assign to_cpu_cache_rsp_valid = (current_state == SEND_CPU_DATA);
+  assign to_cpu_cache_rsp_valid = (current_state == LOOKUP && hit);
 
-  assign to_cpu_cache_rsp_data = (current_state == SEND_CPU_DATA) ? way_rdata[hit_way_index][{offset[`OFFSET_WIDTH - 1 : 2], 5'b0} +: `DATA_WIDTH] :
+  assign to_cpu_cache_rsp_data = (current_state == LOOKUP && hit) ? way_rdata[hit_way_index][{offset[`OFFSET_WIDTH - 1 : 2], 5'b0} +: `DATA_WIDTH] :
                                  32'b0; // Read data from memory or cache, follow the alignment rules
 
   // memory read/write interface

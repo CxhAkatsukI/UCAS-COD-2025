@@ -3,7 +3,7 @@
 `define DARRAY_DATA_WIDTH 256
 `define DARRAY_ADDR_WIDTH 3
 
-module data_array(
+module data_array_1(
 	input                             clk,
 	input  [`DARRAY_ADDR_WIDTH - 1:0] waddr,
 	input  [`DARRAY_ADDR_WIDTH - 1:0] raddr,

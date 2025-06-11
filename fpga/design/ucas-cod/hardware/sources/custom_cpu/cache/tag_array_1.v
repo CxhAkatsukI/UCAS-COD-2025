@@ -3,7 +3,7 @@
 `define TARRAY_DATA_WIDTH 24
 `define TARRAY_ADDR_WIDTH 3
 
-module tag_array(
+module tag_array_1(
 	input                             clk,
 	input  [`TARRAY_ADDR_WIDTH - 1:0] waddr,
 	input  [`TARRAY_ADDR_WIDTH - 1:0] raddr,
