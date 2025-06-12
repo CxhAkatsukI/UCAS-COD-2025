@@ -156,7 +156,7 @@ module icache_top (
     end
   endgenerate
 
-  replacement_simple lru_replacement (
+  replacement lru_replacement (
       .clk(clk),
       .rst(rst),
       .data_0(way_last_hit[0]),
