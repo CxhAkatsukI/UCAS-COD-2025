@@ -1,7 +1,7 @@
 `timescale 10ns / 1ns
 
 `define CACHE_SET 8
-`define CACHE_WAY 4
+`define CACHE_WAY 6
 `define DATA_WIDTH 32
 `define TIME_WIDTH 4
 `define TAG_LEN 24
@@ -163,8 +163,8 @@ module icache_top (
       .data_1(way_last_hit[1]),
       .data_2(way_last_hit[2]),
       .data_3(way_last_hit[3]),
-      //.data_4(way_last_hit[4]),
-      //.data_5(way_last_hit[5]),
+      .data_4(way_last_hit[4]),
+      .data_5(way_last_hit[5]),
       .replaced_way(replaced_way)
   );
 
@@ -186,15 +186,15 @@ module icache_top (
     end
   endgenerate
 
-  assign hit = way_hits[0] || way_hits[1] || way_hits[2] || way_hits[3]; // ||
-               // way_hits[4] || way_hits[5]; // hit if any way is valid and tag matches
+  assign hit = way_hits[0] || way_hits[1] || way_hits[2] || way_hits[3] ||
+               way_hits[4] || way_hits[5]; // hit if any way is valid and tag matches
   assign hit_way_index =
                (way_hits[0]) ? 3'h0 :
                (way_hits[1]) ? 3'h1 :
                (way_hits[2]) ? 3'h2 :
                (way_hits[3]) ? 3'h3 :
-               // (way_hits[4]) ? 3'h4 :
-               // (way_hits[5]) ? 3'h5 :
+               (way_hits[4]) ? 3'h4 :
+               (way_hits[5]) ? 3'h5 :
                                3'b0; // index of the way that was hit
   assign miss = from_cpu_inst_req_valid && !hit;  // miss if request is valid and no hit
 

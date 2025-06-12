@@ -1,7 +1,7 @@
 `timescale 10ns / 1ns
 
 `define CACHE_SET 8
-`define CACHE_WAY 4
+`define CACHE_WAY 6
 `define DATA_WIDTH 32
 `define TIME_WIDTH 4
 `define TAG_LEN 24
@@ -106,8 +106,8 @@ module dcache_top (
              WRW = 13'b01000_0000_0000,
              RDW = 13'b10000_0000_0000;
 
-  reg  [               12:0] current_state;
-  reg  [               12:0] next_state;
+  reg  [12:0] current_state;
+  reg  [12:0] next_state;
 
   // decode the CPU request address
   wire [     `TAG_LEN - 1:0] tag;
@@ -121,25 +121,25 @@ module dcache_top (
   // information from cache blocks (and related control/status signals)
 
   // Arrays of single-bit signals (for each way)
-  wire way_valids[`CACHE_WAY - 1:0];  // valid bits for each way (Correct as is)
-  wire way_dirty[`CACHE_WAY - 1:0];  // dirty bits for each way (Correct as is)
-  wire way_wen[`CACHE_WAY - 1:0];  // write enable for each way (Correct as is)
-  wire way_wen_at_hit[`CACHE_WAY - 1:0];  // write enable for hit (Correct as is)
-  wire way_wen_at_refill[`CACHE_WAY - 1:0];  // write enable for refill (Correct as is)
-  wire way_hits[`CACHE_WAY - 1:0];  // hit signals for each way (Correct as is)
+  wire way_valids        [`CACHE_WAY - 1:0]; // valid bits for each way (Correct as is)
+  wire way_dirty         [`CACHE_WAY - 1:0]; // dirty bits for each way (Correct as is)
+  wire way_wen           [`CACHE_WAY - 1:0]; // write enable for each way (Correct as is)
+  wire way_wen_at_hit    [`CACHE_WAY - 1:0]; // write enable for hit (Correct as is)
+  wire way_wen_at_refill [`CACHE_WAY - 1:0]; // write enable for refill (Correct as is)
+  wire way_hits          [`CACHE_WAY - 1:0]; // hit signals for each way (Correct as is)
 
   // Arrays where each element is a multi-bit vector (for each way)
   // Syntax: wire [ELEMENT_WIDTH - 1:0] array_name [ARRAY_SIZE - 1:0];
-  wire [`TAG_LEN    - 1:0] way_tags[`CACHE_WAY - 1:0];  // tags for each way
-  wire [`LINE_LEN   - 1:0] way_rdata[`CACHE_WAY - 1:0];  // data read from each way
+  wire [`TAG_LEN    - 1:0] way_tags     [`CACHE_WAY - 1:0]; // tags for each way
+  wire [`LINE_LEN   - 1:0] way_rdata    [`CACHE_WAY - 1:0]; // data read from each way
   wire [`LINE_LEN   - 1:0] way_wdata    [`CACHE_WAY - 1:0]; // data to be written to each way (calculated value)
-  wire [`TIME_WIDTH - 1:0] way_last_hit[`CACHE_WAY - 1:0];  // last hit time for each way
+  wire [`TIME_WIDTH - 1:0] way_last_hit [`CACHE_WAY - 1:0]; // last hit time for each way
 
   // Single multi-bit signals (vectors) or registers
   // These are NOT arrays of ways, but single values.
   reg  [`TIME_WIDTH - 1:0]  lru_timestamp_counter; // timestamp for LRU (should be reg as it's assigned in always@posedge)
-  wire [2:0] hit_way_index;  // index of the way that was hit (vector, not array)
-  wire [2:0] replaced_way;  // index of the way that was replaced (vector, not array)
+  wire [2:0]                hit_way_index;       // index of the way that was hit (vector, not array)
+  wire [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
 
   // Other internal signals that were previously problematic if declared as multi-dimensional arrays incorrectly
   // (Ensure these are declared correctly where they are defined/assigned)
@@ -156,81 +156,82 @@ module dcache_top (
   generate
     for (i = 0; i < `CACHE_WAY; i = i + 1) begin
       custom_array #(
-          .TARRAY_DATA_WIDTH(1)
+        .TARRAY_DATA_WIDTH(1)
       ) valid_array (
-          .clk(clk),
-          .waddr(index),
-          .raddr(index),
-          .wen(way_wen[i]),
-          .rst(rst),
-          .wdata(1'b1),  // write valid bit
-          .rdata(way_valids[i])
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen(way_wen[i]),
+        .rst(rst),
+        .wdata(1'b1), // write valid bit
+        .rdata(way_valids[i])
       );
 
       custom_array #(
-          .TARRAY_DATA_WIDTH(1)
+        .TARRAY_DATA_WIDTH(1)
       ) dirty_array (
-          .clk  (clk),
-          .waddr(index),
-          .raddr(index),
-          .wen  (way_wen[i]),
-          .rst  (rst),
-          .wdata(way_wen_at_hit[i]),  // write dirty bit
-          .rdata(way_dirty[i])
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen(way_wen[i]),
+        .rst(rst),
+        .wdata(way_wen_at_hit[i]), // write dirty bit
+        .rdata(way_dirty[i])
       );
-      custom_array #(
-          .TARRAY_DATA_WIDTH(`TAG_LEN)
+     custom_array #(
+        .TARRAY_DATA_WIDTH(`TAG_LEN)
       ) tag_array (
-          .clk(clk),
-          .waddr(index),
-          .raddr(index),
-          .wen(way_wen[i]),
-          .rst(rst),
-          .wdata(tag),  // write tag
-          .rdata(way_tags[i])
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen(way_wen[i]),
+        .rst(rst),
+        .wdata(tag), // write tag
+        .rdata(way_tags[i])
       );
 
       custom_array #(
-          .TARRAY_DATA_WIDTH(`LINE_LEN)
+        .TARRAY_DATA_WIDTH(`LINE_LEN)
       ) data_array (
-          .clk  (clk),
-          .waddr(index),
-          .raddr(index),
-          .wen  (way_wen[i]),
-          .rst  (rst),
-          .wdata(way_wdata[i]),  // write data
-          .rdata(way_rdata[i])
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen(way_wen[i]),
+        .rst(rst),
+        .wdata(way_wdata[i]), // write data
+        .rdata(way_rdata[i])
       );
 
       custom_array #(
-          .TARRAY_DATA_WIDTH(`TIME_WIDTH)
+        .TARRAY_DATA_WIDTH(`TIME_WIDTH)
       ) last_hit_array (
-          .clk(clk),
-          .waddr(index),
-          .raddr(index),
-          .wen((current_state == WAIT_CPU) && way_hits[i]),
-          .rst(rst),
-          .wdata(lru_timestamp_counter),  // write last hit time
-          .rdata(way_last_hit[i])
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen((current_state == WAIT_CPU) && way_hits[i]),
+        .rst(rst),
+        .wdata(lru_timestamp_counter), // write last hit time
+        .rdata(way_last_hit[i])
       );
     end
   endgenerate
 
   replacement_simple lru_replacement (
-      .clk(clk),
-      .rst(rst),
-      .data_0(way_last_hit[0]),
-      .data_1(way_last_hit[1]),
-      .data_2(way_last_hit[2]),
-      .data_3(way_last_hit[3]),
-      // .data_4(way_last_hit[4]),
-      // .data_5(way_last_hit[5]),
-      .replaced_way(replaced_way)
+    .clk(clk),
+    .rst(rst),
+    .data_0(way_last_hit[0]),
+    .data_1(way_last_hit[1]),
+    .data_2(way_last_hit[2]),
+    .data_3(way_last_hit[3]),
+    .data_4(way_last_hit[4]),
+    .data_5(way_last_hit[5]),
+    .replaced_way(replaced_way)
   );
 
   // generate the lru_timestamp_counter
   always @(posedge clk) begin
-    if (rst) lru_timestamp_counter <= `TIME_WIDTH'b0;
+    if (rst)
+      lru_timestamp_counter <= `TIME_WIDTH'b0;
     else if ((current_state == WAIT_CPU) && from_cpu_mem_req_valid && hit && lru_timestamp_counter != 32'hffff_ffff)
       lru_timestamp_counter <= lru_timestamp_counter + 1;
   end
@@ -239,29 +240,29 @@ module dcache_top (
   // write to memory
   reg [3:0] write_counts;
   always @(posedge clk) begin
-    if (rst || (current_state == WAIT_CPU)) write_counts <= 4'b0;
+    if (rst || (current_state == WAIT_CPU))
+      write_counts <= 4'b0;
     else if (((current_state == WRW) || (current_state == SYNC)) && from_mem_wr_data_ready)
       write_counts <= write_counts + 1;
   end
 
   reg [`LINE_LEN - 1:0] sync_reg;
   always @(posedge clk) begin
-    if (rst) sync_reg <= `LINE_LEN'b0;
+    if (rst)
+      sync_reg <= `LINE_LEN'b0;
     else if ((current_state == MISS_DT) && from_mem_wr_req_ready)
       sync_reg <= way_rdata[replaced_way];
     else if ((current_state == SYNC) && from_mem_wr_data_ready)
-      sync_reg <= {`DATA_WIDTH'b0, sync_reg[`LINE_LEN-1 : `DATA_WIDTH]};
+      sync_reg <= {`DATA_WIDTH'b0, sync_reg[`LINE_LEN - 1 : `DATA_WIDTH]};
   end
 
   assign w_done = ((current_state == SYNC) && (write_counts == 4'b1000)) || ((current_state == WRW) && (write_counts == 4'b0001)); // Write done when all 8 beats are written
 
   wire [31:0] mask;
-  assign mask = {
-    {8{from_cpu_mem_req_wstrb[3]}},
-    {8{from_cpu_mem_req_wstrb[2]}},
-    {8{from_cpu_mem_req_wstrb[1]}},
-    {8{from_cpu_mem_req_wstrb[0]}}
-  };
+  assign mask = {{8{from_cpu_mem_req_wstrb[3]}},
+                 {8{from_cpu_mem_req_wstrb[2]}},
+                 {8{from_cpu_mem_req_wstrb[1]}},
+                 {8{from_cpu_mem_req_wstrb[0]}}};
 
   // generate the hit, wen and wdata signals
   generate
@@ -278,18 +279,18 @@ module dcache_top (
     end
   endgenerate
 
-  assign hit = way_hits[0] || way_hits[1] || way_hits[2] || way_hits[3];  // ||
-  // way_hits[4] || way_hits[5]; // hit if any way is valid and tag matches
+  assign hit = way_hits[0] || way_hits[1] || way_hits[2] || way_hits[3] ||
+               way_hits[4] || way_hits[5]; // hit if any way is valid and tag matches
   assign hit_way_index = 
                (way_hits[0]) ? 3'h0 :
                (way_hits[1]) ? 3'h1 :
                (way_hits[2]) ? 3'h2 :
                (way_hits[3]) ? 3'h3 :
-      // (way_hits[4]) ? 3'h4 :
-      // (way_hits[5]) ? 3'h5 :
-      3'b0;  // index of the way that was hit
-  assign miss = from_cpu_mem_req_valid && !hit;  // miss if request is valid and no hit
-  assign dirty = way_dirty[replaced_way];  // dirty if the way that was hit is dirty
+               (way_hits[4]) ? 3'h4 :
+               (way_hits[5]) ? 3'h5 :
+                               3'b0; // index of the way that was hit
+  assign miss = from_cpu_mem_req_valid && !hit; // miss if request is valid and no hit
+  assign dirty = way_dirty[replaced_way]; // dirty if the way that was hit is dirty
 
 
   always @(posedge clk) begin
@@ -408,71 +409,73 @@ module dcache_top (
 endmodule
 
 `define MAX_32_BIT 32'hffff_ffff
-
 module replacement (
     input                        clk,
     input                        rst,
     input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
-                                 data_3, // Removed data_4, data_5
-    output [              1 : 0] replaced_way // Changed from [2:0] to [1:0]
+                                 data_3, data_4, data_5,
+    output [              2 : 0] replaced_way
 );
 
-    wire         full;
-    reg  [1 : 0] random_num; // Changed from [2:0] to [1:0]
 
-    // Updated full condition for 4 inputs
+    wire         full;
+    reg  [2 : 0] random_num;
+
     assign full = (data_0 == `MAX_32_BIT) && (data_1 == `MAX_32_BIT) &&
-                  (data_2 == `MAX_32_BIT) && (data_3 == `MAX_32_BIT);
+                  (data_2 == `MAX_32_BIT) && (data_3 == `MAX_32_BIT) &&
+                  (data_4 == `MAX_32_BIT) && (data_5 == `MAX_32_BIT);
 
     always @(posedge clk) begin
         if (rst)
-            random_num <= 2'b0; // Use 2-bit literal
-        else if (random_num == 2'h3) // Max value for 4 ways is 3
-            random_num <= 2'h0;
+            random_num <= 3'b0;
+        else if (random_num == 3'h5)
+            random_num <= 3'h0;
         else
             random_num <= random_num + 1;
     end
 
-    // Reduced set of comparison wires
-    wire le_01, le_02, le_03,
-         le_12, le_13,
-         le_23;
+    wire le_01, le_02, le_03, le_04, le_05,
+         le_12, le_13, le_14, le_15, le_23,
+         le_24, le_25, le_34, le_35, le_45;
 
-    // Reduced set of least registers
     reg  least_0, least_1, least_2,
-         least_3;
+         least_3, least_4, least_5;
 
-    // Updated comparison assignments
     assign le_01 = (data_0 < data_1);
     assign le_02 = (data_0 < data_2);
     assign le_03 = (data_0 < data_3);
+    assign le_04 = (data_0 < data_4);
+    assign le_05 = (data_0 < data_5);
     assign le_12 = (data_1 < data_2);
     assign le_13 = (data_1 < data_3);
+    assign le_14 = (data_1 < data_4);
+    assign le_15 = (data_1 < data_5);
     assign le_23 = (data_2 < data_3);
+    assign le_24 = (data_2 < data_4);
+    assign le_25 = (data_2 < data_5);
+    assign le_34 = (data_3 < data_4);
+    assign le_35 = (data_3 < data_5);
+    assign le_45 = (data_4 < data_5);
 
-    // Updated least logic
-    always @(posedge clk) begin // Assuming these should be registered, as in original
-        least_0 <=  le_01 &&  le_02 &&  le_03;
-        least_1 <= !le_01 &&  le_12 &&  le_13;
-        least_2 <= !le_02 && !le_12 &&  le_23;
-        least_3 <= !le_03 && !le_13 && !le_23; // data_3 is least if it's <= data_0, data_1, data_2
+
+    always @(posedge clk) begin
+        least_0 <=  le_01 &&  le_02 &&  le_03 &&  le_04 &&  le_05;
+        least_1 <= !le_01 &&  le_12 &&  le_13 &&  le_14 &&  le_15;
+        least_2 <= !le_02 && !le_12 &&  le_23 &&  le_24 &&  le_25;
+        least_3 <= !le_03 && !le_13 && !le_23 &&  le_34 &&  le_35;
+        least_4 <= !le_04 && !le_14 && !le_24 && !le_34 &&  le_45;
+        least_5 <= !le_05 && !le_15 && !le_25 && !le_35 && !le_45;
     end
-    // Alternative for combinational least signals (might be more typical for this part of LRU)
-    // wire comb_least_0, comb_least_1, comb_least_2, comb_least_3;
-    // assign comb_least_0 =  le_01 &&  le_02 &&  le_03;
-    // assign comb_least_1 = !le_01 &&  le_12 &&  le_13;
-    // assign comb_least_2 = !le_02 && !le_12 &&  le_23;
-    // assign comb_least_3 = !le_03 && !le_13 && !le_23;
-    // Then use comb_least_x in the final assignment if they don't need to be registered.
-    // The original had them as `reg` updated on `posedge clk`, so I'll stick to that.
 
-    // Updated replaced_way assignment
+
     assign replaced_way = {
-        ({2{ full           }} & random_num) | // Replication factor is 2
-        ({2{!full && least_0}} &       2'h0) | // Way constants are 2-bit
-        ({2{!full && least_1}} &       2'h1) |
-        ({2{!full && least_2}} &       2'h2) |
-        ({2{!full && least_3}} &       2'h3)
+        ({3{ full           }} & random_num) |
+        ({3{!full && least_0}} &       3'h0) |
+        ({3{!full && least_1}} &       3'h1) |
+        ({3{!full && least_2}} &       3'h2) |
+        ({3{!full && least_3}} &       3'h3) |
+        ({3{!full && least_4}} &       3'h4) |
+        ({3{!full && least_5}} &       3'h5)
     };
 
 endmodule
@@ -481,9 +484,9 @@ module replacement_simple (
     input                        clk,
     input                        rst,
     input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
-                                 data_3, // Removed data_4, data_5
-    output [              1 : 0] replaced_way // Changed from [2:0] to [1:0]
+                                 data_3, data_4, data_5,
+    output [              2 : 0] replaced_way
 );
 
-    assign replaced_way = 2'b0; // Output a 2-bit zero
+assign replaced_way = 0;
 endmodule
