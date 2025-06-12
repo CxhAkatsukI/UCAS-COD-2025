@@ -27,6 +27,8 @@ TARGET := $(patsubst src/%.c,%,$(wildcard src/*.c))
 ELFS := $(addprefix $(ARCH)/elf/,$(TARGET))
 
 all: $(ELFS)
+	@rm -rf $(ARCH)/trace
+	@mkdir -p $(ARCH)/trace
 
 $(ARCH)/elf/%: $(ARCH)/obj/common/start.o $(ARCH)/obj/common/printf.o $(ARCH)/obj/%.o
 	@mkdir -p $(DIR_OBJS)

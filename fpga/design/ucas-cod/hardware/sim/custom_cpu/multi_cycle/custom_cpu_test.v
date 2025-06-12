@@ -233,6 +233,7 @@ module custom_cpu_test(
                 $fatal;
             end
         endcase
+		if (ret == 0 || ret == -1) trace_end = 1'b1;
         end
     endtask
 
