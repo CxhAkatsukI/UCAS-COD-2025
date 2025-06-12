@@ -214,10 +214,10 @@ module icache_top (
         next_state = WAIT_CPU;  // Start in INIT state, then wait for CPU request
       end
       WAIT_CPU: begin
-        if (from_cpu_inst_req_valid) begin
-          next_state = LOOKUP;  // If CPU request is valid, go to lookup state
-        end else begin
-          next_state = WAIT_CPU;
+        if (from_cpu_inst_req_valid && hit) begin
+          next_state = WAIT_CPU;  // If CPU request is valid, go to lookup state
+        end else if (from_cpu_inst_req_valid && !hit) begin
+          next_state = MISS_CL;
         end
       end
       LOOKUP: begin
@@ -232,7 +232,7 @@ module icache_top (
       end
       REFILL: begin
         if (r_done) begin
-          next_state = LOOKUP;  // After refill, go to hit state
+          next_state = WAIT_CPU;  // After refill, go to hit state
         end else begin
           next_state = REFILL;  // Continue refilling if not done
         end
@@ -248,9 +248,9 @@ module icache_top (
   // can be optimized
   assign to_cpu_inst_req_ready = (current_state == WAIT_CPU);
 
-  assign to_cpu_cache_rsp_valid = (current_state == LOOKUP && hit);
+  assign to_cpu_cache_rsp_valid = (current_state == WAIT_CPU) && from_cpu_inst_req_valid && hit;
 
-  assign to_cpu_cache_rsp_data = (current_state == LOOKUP && hit) ? way_rdata[hit_way_index][{offset[`OFFSET_WIDTH - 1 : 2], 5'b0} +: `DATA_WIDTH] :
+  assign to_cpu_cache_rsp_data = (from_cpu_inst_req_valid && hit) ? way_rdata[hit_way_index][{offset[`OFFSET_WIDTH - 1 : 2], 5'b0} +: `DATA_WIDTH] :
                                  32'b0; // Read data from memory or cache, follow the alignment rules
 
   // memory read/write interface
