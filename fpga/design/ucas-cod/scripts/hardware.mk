@@ -44,6 +44,18 @@ bhv_sim_verilator: $(SIM_OBJ_LOC)/$(SIM_TARGET) $(ARCH_OPTION_TCL)
 	-$(VERILATOR_PATH)/bin/verilator --lint-only --top-module $(SIM_TOP) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_VL)
 	$(SIM_OBJ_LOC)/$(SIM_TARGET) +DUMP="$(SIM_DUMP)" +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"
 
+
+trace_generate: $(SIM_SRCS) $(ARCH_OPTION_TCL)
+	@mkdir -p $(SIM_OBJ_LOC)
+	if [ ! -d $(VERILATOR_PATH) ]; then \
+		git clone --depth=1 http://8.152.206.202/ucas-cod-2021-dev/cod-verilator-bin.git $(VERILATOR_PATH); \
+		chmod -R +x $(VERILATOR_PATH)/bin; \
+	fi
+	$(VERILATOR_PATH)/bin/verilator --cc --exe --trace --x-initial 0 -Wno-lint -Wno-unoptflat -CFLAGS -Wall --top-module $(SIM_TOP) -Mdir $(SIM_OBJ_LOC) -o $(SIM_TARGET) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_IV)
+	make -C $(SIM_OBJ_LOC) -f V$(SIM_TOP).mk VERILATOR_ROOT=$(VERILATOR_PATH) $(SIM_TARGET)
+	-$(VERILATOR_PATH)/bin/verilator --lint-only --top-module $(SIM_TOP) $(VL_FLAGS) $(SIM_SRCS) $(SIM_SRCS_IV)
+	$(SIM_OBJ_LOC)/$(SIM_TARGET) +DUMP="$(SIM_DUMP)" +INITMEM="$(MEM_FILE)" +TRACE_FILE="$(TRACE_FILE)"
+
 ifndef SIM_TOP_IV
 SIM_TOP_IV := $(SIM_TOP)
 endif
