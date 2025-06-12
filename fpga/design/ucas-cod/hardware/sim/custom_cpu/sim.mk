@@ -15,6 +15,7 @@ SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.v)
 SIM_SRCS += $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/common/*.v)
 
 SIM_SRCS_IV := $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.v)
+SIM_SRCS_IV += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.cpp))
 
 SIM_SRCS_VL := $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/golden/$(DUT_ISA)/*.sv)
 SIM_SRCS_VL += $(realpath $(wildcard $(SIM_SRC_LOC)/$(SIM_TARGET)/$(DUT_ARCH)/*.cpp))
