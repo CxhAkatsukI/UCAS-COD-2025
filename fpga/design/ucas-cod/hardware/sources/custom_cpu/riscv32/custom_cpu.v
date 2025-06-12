@@ -589,31 +589,36 @@ module ifu (
           next_state = IF;
         end
       end
-      IF : begin
-        if (ld_use_branch_handler) begin
-          next_state = STA;
-        end
-        if (Inst_Req_Ready) begin
-          next_state = IW;
-        end
-        else begin
-          next_state = IF;
-        end
-      end
-      IW : begin
-        if (ld_use_branch_handler) begin
-          next_state = STA;
-        end
+//      IF : begin
+//        if (Inst_Req_Ready) begin
+//          next_state = IW;
+//        end
+//        else begin
+//          next_state = IF;
+//        end
+//      end
+//      IW : begin
+//        if (Inst_Valid) begin
+//          next_state = RDY;
+//        end
+//        else begin
+//          next_state = IW;
+//        end
+//      end
+      IF : begin // to boost frequency, this state handles both instruction fetch and stall
         if (Inst_Valid) begin
           next_state = RDY;
-        end
-        else begin
-          next_state = IW;
+        end else begin
+          next_state = IF;
         end
       end
       RDY : begin
         if (pipeline_advance_enable) begin
-          next_state = STA;
+          if (is_sequential_fetch) begin
+            next_state = IF;
+          end else begin
+            next_state = STA;
+          end
         end
         else begin
           next_state = RDY;
@@ -634,18 +639,30 @@ module ifu (
 
   // -- FSM Output Logic --
   wire pc_write_enable;
-  assign IRWrite = (current_state == IW) && Inst_Valid;
+  assign IRWrite = (current_state == IF) && Inst_Valid;
   assign Inst_Req_Valid = (current_state == IF); // Request instruction fetch
-  assign Inst_Ready = (current_state == INIT) || (current_state == IW);
+  assign Inst_Ready = (current_state == INIT) || (current_state == IF);
   assign IF_Ready = (current_state == RDY);
   assign pc_write_enable = (current_state == STA) && !ld_use_harzard;
+  assign pc_write_sequential = (current_state == RDY) && is_sequential_fetch && !ld_use_harzard && pipeline_advance_enable;
   assign IF_stall = (current_state == IF && !Inst_Req_Ready && !rst);
   assign IW_stall = (current_state == IW && !Inst_Valid && !rst);
 
+  wire [ 6:0] opcode;               // Opcode field
+  assign opcode = IR[6:0];
+  wire is_sequential_fetch;
+  assign is_sequential_fetch = !(opcode == 7'b1101111) && // JAL
+                               !(opcode == 7'b1100111) && // JALR
+                               !(opcode == 7'b1100011);   // Store
+  wire [31:0] sequential_next_pc;
+  assign sequential_next_pc = PC + 4; // Sequential fetch is just PC + 4
 
   always @(posedge clk) begin
     if (rst) begin
       PC <= 32'b0;
+    end
+    else if (pc_write_sequential) begin
+      PC <= sequential_next_pc;
     end
     else if (pc_write_enable || ld_use_branch_handler) begin
       PC <= next_pc;
@@ -657,7 +674,7 @@ module ifu (
       IR <= 32'b0;
       fetched_inst_valid <= 0;
     end
-    else if (current_state == IW && Inst_Valid) begin
+    else if (current_state == IF && Inst_Valid) begin
       IR <= instruction;
       fetched_inst_valid <= 1'b1;
     end
