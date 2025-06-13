@@ -32,7 +32,7 @@ module custom_cpu_test (
 
     always @(posedge sys_clk) begin
         if (rf_en_rt & rf_waddr_rt != 5'd0) begin
-            $fwrite(trace_file, "1 %h %d %h %h %d\n",pc_rt,rf_waddr_rt, rf_wdata_rt, 0, 0);
+            $fwrite(trace_file, "1 %h %d %h %h %d\n",pc_rt,rf_waddr_rt, rf_wdata_rt, 32'hffffffff, 0);
         end
     end
 
