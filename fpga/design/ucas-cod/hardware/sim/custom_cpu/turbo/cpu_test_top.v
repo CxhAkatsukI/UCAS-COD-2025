@@ -145,6 +145,54 @@ module cpu_test_top  #
   wire        Read_data_Valid;
   wire        Read_data_Ready; 
 
+  wire 	      uart_req;
+  reg 	      uart_req_r;
+  wire [ 3:0] uart_off;
+  wire        uart_write_fifo;
+  reg         uart_write_fifo_r;
+  wire        uart_read_state;
+  wire        uart_read_ok;
+  wire [31:0] uart_read_data;
+
+  always @(posedge cpu_clk) begin
+    if (~cpu_reset_n)
+      uart_req_r <= 1'b0;
+    else if (MemRead & uart_req)
+      uart_req_r <= 1'b1;
+    else if (uart_req_r & uart_read_ok)
+      uart_req_r <= 1'b0;
+    
+    if (~cpu_reset_n)
+      uart_write_fifo_r <= 1'b0;
+    else if (uart_write_fifo & Mem_Req_Ready)
+      uart_write_fifo_r <= 1'b1;
+    else if (uart_write_fifo_r)
+      uart_write_fifo_r <= 1'b0;
+  end
+  assign uart_req 		    = Address[31:16] == 16'h6000;
+  assign uart_off 		    = Address[3:0];
+  assign uart_write_fifo 	= MemWrite & uart_req & uart_off == 4'd4;
+  assign uart_read_state 	= MemRead & uart_req & uart_off == 4'd8;
+
+  /* Wrapper To AXI */
+  wire        cpu_mem_awvalid_axi;
+  wire        cpu_mem_wvalid_axi;
+  /* AXI & UART TO Wrapper */
+  wire        cpu_mem_awready_memwp;
+  wire        cpu_mem_wready_memwp;
+  wire [31:0] cpu_mem_rdata_memwp;
+  wire        cpu_mem_rvalid_memwp;
+  wire        cpu_mem_arready_memwp;
+
+  assign cpu_mem_awvalid_axi    = cpu_mem_awvalid & ~uart_req;
+  assign cpu_mem_wvalid_axi     = cpu_mem_wvalid & ~uart_req;
+
+  assign cpu_mem_awready_memwp  = uart_write_fifo | cpu_mem_awready;
+  assign cpu_mem_wready_memwp   = uart_write_fifo | cpu_mem_wready;
+  assign cpu_mem_rdata_memwp    = {32{~uart_req_r}} & cpu_mem_rdata | {32{uart_req_r}} & uart_read_data;
+  assign cpu_mem_rvalid_memwp   = ~uart_req_r & cpu_mem_rvalid | uart_req_r & uart_read_ok;
+  assign cpu_mem_arready_memwp  = cpu_mem_arready | uart_req & uart_read_state;
+
   wire [4:0]  random_mask;
 
   //custom CPU core
@@ -221,14 +269,14 @@ module cpu_test_top  #
 	.Read_data_Ready (Read_data_Ready),
 	                      
 	.cpu_mem_araddr   (cpu_mem_araddr ),
-	.cpu_mem_arready  (cpu_mem_arready),
+	.cpu_mem_arready  (cpu_mem_arready_memwp),
 	.cpu_mem_arvalid  (cpu_mem_arvalid),
 	.cpu_mem_arsize   (cpu_mem_arsize ),
 	.cpu_mem_arburst  (cpu_mem_arburst),
 	.cpu_mem_arlen    (cpu_mem_arlen  ),
 	                      
 	.cpu_mem_awaddr   (cpu_mem_awaddr ),
-	.cpu_mem_awready  (cpu_mem_awready),
+	.cpu_mem_awready  (cpu_mem_awready_memwp),
 	.cpu_mem_awvalid  (cpu_mem_awvalid),
 	.cpu_mem_awsize   (cpu_mem_awsize ),
 	.cpu_mem_awburst  (cpu_mem_awburst),
@@ -243,10 +291,20 @@ module cpu_test_top  #
 	.cpu_mem_rlast    (cpu_mem_rlast ),
 	                      
 	.cpu_mem_wdata    (cpu_mem_wdata ),
-	.cpu_mem_wready   (cpu_mem_wready),
+	.cpu_mem_wready   (cpu_mem_wready_memwp),
 	.cpu_mem_wstrb    (cpu_mem_wstrb ),
 	.cpu_mem_wvalid   (cpu_mem_wvalid),
 	.cpu_mem_wlast    (cpu_mem_wlast )
+  );
+
+  uart_sim #(.UART_SIM(0)) u_uart_sim (
+	.clk        (cpu_clk),
+	.reset	    (~cpu_reset_n),
+	.write_fifo (uart_write_fifo_r),
+	.write_data (Write_data[7:0]),
+	.read_state (uart_read_state),
+	.read_ok    (uart_read_ok),
+	.read_data  (uart_read_data)
   );
 
   cpu_to_mem_axi_2x1_arb  u_cpu_arb (
@@ -274,7 +332,7 @@ module cpu_test_top  #
 	                      
 	.cpu_mem_awaddr   (cpu_mem_awaddr[31:0]),
 	.cpu_mem_awready  (cpu_mem_awready),
-	.cpu_mem_awvalid  (cpu_mem_awvalid),
+	.cpu_mem_awvalid  (cpu_mem_awvalid_axi),
 	.cpu_mem_awsize   (cpu_mem_awsize ),
 	.cpu_mem_awburst  (cpu_mem_awburst),
 	.cpu_mem_awlen    (cpu_mem_awlen  ),
@@ -290,7 +348,7 @@ module cpu_test_top  #
 	.cpu_mem_wdata    (cpu_mem_wdata ),
 	.cpu_mem_wready   (cpu_mem_wready),
 	.cpu_mem_wstrb    (cpu_mem_wstrb ),
-	.cpu_mem_wvalid   (cpu_mem_wvalid),
+	.cpu_mem_wvalid   (cpu_mem_wvalid_axi),
 	.cpu_mem_wlast    (cpu_mem_wlast ),
 	
 	.s_axi_awid      (s_axi_awid),
