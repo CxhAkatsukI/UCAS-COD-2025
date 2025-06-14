@@ -124,7 +124,7 @@ module custom_cpu_test (
         end
     end
 
-    reg [4095:0] dumpfile;
+reg [4095:0] dumpfile;
     initial begin
         if ($value$plusargs("DUMP=%s", dumpfile) && mode == `MODE_READ) begin
             $dumpfile(dumpfile);
