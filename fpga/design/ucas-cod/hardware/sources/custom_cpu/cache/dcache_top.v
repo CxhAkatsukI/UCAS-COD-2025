@@ -139,7 +139,7 @@ module dcache_top (
   // These are NOT arrays of ways, but single values.
   reg  [`TIME_WIDTH - 1:0]  lru_timestamp_counter; // timestamp for LRU (should be reg as it's assigned in always@posedge)
   wire [2:0]                hit_way_index;       // index of the way that was hit (vector, not array)
-  reg  [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
+  wire [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
 
   // Other internal signals that were previously problematic if declared as multi-dimensional arrays incorrectly
   // (Ensure these are declared correctly where they are defined/assigned)
