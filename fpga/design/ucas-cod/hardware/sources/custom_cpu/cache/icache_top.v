@@ -3,7 +3,7 @@
 `define CACHE_SET 8
 `define CACHE_WAY 6
 `define DATA_WIDTH 32
-`define TIME_WIDTH 4
+`define TIME_WIDTH 3
 `define TAG_LEN 24
 `define INDEX_WIDTH 3
 `define LINE_LEN 256
@@ -91,6 +91,7 @@ module icache_top (
   wire [`LINE_LEN   - 1:0] way_rdata[`CACHE_WAY - 1:0];  // data read from each way
   wire [`LINE_LEN   - 1:0] way_wdata    [`CACHE_WAY - 1:0]; // data to be written to each way (calculated value)
   wire [`TIME_WIDTH - 1:0] way_last_hit[`CACHE_WAY - 1:0];  // last hit time for each way
+  reg  [`TIME_WIDTH - 1:0] last_hit     [`CACHE_SET - 1:0][`CACHE_WAY - 1:0]; // last hit time for each way
 
   // Single multi-bit signals (vectors) or registers
   // These are NOT arrays of ways, but single values.
@@ -101,6 +102,30 @@ module icache_top (
   // define the wires that drive the FSM transitions
   wire hit, miss;
   wire r_done;
+
+  // prepare init value for last_hit_array for replacement
+  integer j;
+  always @(posedge clk) begin
+    if (rst) begin
+      for (j = 0; j < `CACHE_WAY; j = j + 1) begin
+        last_hit[0][j] <= j;
+        last_hit[1][j] <= j;
+        last_hit[2][j] <= j;
+        last_hit[3][j] <= j;
+        last_hit[4][j] <= j;
+        last_hit[5][j] <= j;
+        last_hit[6][j] <= j;
+        last_hit[7][j] <= j;
+      end
+    end else if (current_state == WAIT_CPU && hit) begin
+      for (j = 0; j < `CACHE_WAY; j = j + 1) begin
+        last_hit[index][j] <= way_hits[j]? 0         :
+                              last_hit[index][j] + 1 ;
+      end
+    end
+  end
+
+  assign way_last_hit = last_hit[index]; // assign the last hit time for the current index
 
   // generate cache
   genvar i;
@@ -142,21 +167,21 @@ module icache_top (
           .rdata(way_rdata[i])
       );
 
-      custom_array #(
-          .TARRAY_DATA_WIDTH(`TIME_WIDTH)
-      ) last_hit_array (
-          .clk(clk),
-          .waddr(index),
-          .raddr(index),
-          .wen(current_state == WAIT_CPU && way_hits[i]),
-          .rst(rst),
-          .wdata(lru_timestamp_counter),  // write last hit time
-          .rdata(way_last_hit[i])
-      );
+//      custom_array #(
+//          .TARRAY_DATA_WIDTH(`TIME_WIDTH)
+//      ) last_hit_array (
+//          .clk(clk),
+//          .waddr(index),
+//          .raddr(index),
+//          .wen(current_state == WAIT_CPU && way_hits[i]),
+//          .rst(rst),
+//          .wdata(lru_timestamp_counter),  // write last hit time
+//          .rdata(way_last_hit[i])
+//      );
     end
   endgenerate
 
-  replacement lru_replacement (
+  replacement_simple lru_replacement (
       .clk(clk),
       .rst(rst),
       .data_0(way_last_hit[0]),

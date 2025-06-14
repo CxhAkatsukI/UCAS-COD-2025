@@ -3,7 +3,7 @@
 `define CACHE_SET 8
 `define CACHE_WAY 6
 `define DATA_WIDTH 32
-`define TIME_WIDTH 4
+`define TIME_WIDTH 3
 `define TAG_LEN 24
 `define INDEX_WIDTH 3
 `define LINE_LEN 256
@@ -167,9 +167,8 @@ module dcache_top (
       end
     end else if (current_state == WAIT_CPU && hit) begin
       for (j = 0; j < `CACHE_WAY; j = j + 1) begin
-        last_hit[index][j] <= way_hits[j]                                           ? 0                      :
-                              (last_hit[index][j] < last_hit[index][hit_way_index]) ? last_hit[index][j] + 1 :
-                              last_hit[index][j];
+        last_hit[index][j] <= way_hits[j] ?        0 :
+                              last_hit[index][j] + 1 ;
       end
     end
   end
