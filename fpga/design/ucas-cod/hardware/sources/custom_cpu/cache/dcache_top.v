@@ -216,17 +216,17 @@ module dcache_top (
     end
   endgenerate
 
-  // generate replacement logic
-  reg replacement_reg;
-  always @(posedge clk) begin
-    if (rst) begin
-      replacement_reg <= 2'b0;
-    end
-    if ((current_state == REFILL) && r_done) begin
-      replacement_reg <= replacement_reg + 1;
-    end
-  end
-  assign replaced_way = replacement_reg;
+  replacement_two lru_replacement (
+      .clk(clk),
+      .rst(rst),
+      .data_0(way_last_hit[0]),
+      .data_1(way_last_hit[1]),
+      .data_2(way_last_hit[2]),
+      .data_3(way_last_hit[3]),
+      //.data_4(way_last_hit[4]),
+      //.data_5(way_last_hit[5]),
+      .replaced_way(replaced_way)
+  );
 
   // generate the lru_timestamp_counter
   always @(posedge clk) begin
@@ -486,4 +486,50 @@ module replacement_simple (
 );
 
     assign replaced_way = 2'b0; // Output a 2-bit zero
+endmodule
+
+
+module replacement_two (
+    input                        clk,
+    input                        rst,
+    // Inputs data_2 and data_3 are now effectively unused for comparison logic
+    // but might still be relevant if 'full' means all 4 original slots are MAX.
+    // For this strict "only compare and select前两个", let's assume 'full'
+    // also only cares about data_0 and data_1 for simplicity.
+    input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2, data_3,
+    output                       replaced_way // Output is now 1 bit (0 or 1)
+);
+
+    wire         full_for_random; // Indicates if we should use random due to data_0 and data_1
+    reg          random_bit;   // 1-bit random number (0 or 1)
+
+    // 'full_for_random' now means both data_0 and data_1 are at MAX_32_BIT
+    // This implies neither can be chosen based on value, so we pick randomly between them.
+    assign full_for_random = (data_0 == `MAX_32_BIT) && (data_1 == `MAX_32_BIT);
+
+    always @(posedge clk) begin
+        if (rst)
+            random_bit <= 1'b0;
+        else
+            random_bit <= ~random_bit; // Toggle between 0 and 1
+    end
+
+    wire data0_is_less_than_data1;
+    assign data0_is_less_than_data1 = (data_0 < data_1);
+
+    // Decision logic:
+    // If full_for_random is true, pick randomly between way 0 and way 1.
+    // Otherwise:
+    //   If data_0 < data_1, replace way 0.
+    //   Else (data_1 <= data_0), replace way 1.
+    // We also need to consider if one of them is MAX_32_BIT.
+    // If data_0 is MAX_32_BIT, we must replace data_0 (unless data_1 is also MAX).
+    // If data_1 is MAX_32_BIT, we must replace data_1 (unless data_0 is also MAX).
+
+    assign replaced_way = full_for_random ? random_bit : // If both are MAX, random
+                          (data_0 == `MAX_32_BIT) ? 1'b0 :    // If data_0 is MAX (and data_1 is not), replace way 0
+                          (data_1 == `MAX_32_BIT) ? 1'b1 :    // If data_1 is MAX (and data_0 is not), replace way 1
+                          data0_is_less_than_data1 ? 1'b0 :   // If data_0 < data_1, replace way 0
+                          1'b1;                               // Else (data_1 <= data_0, neither is MAX), replace way 1
+
 endmodule
