@@ -173,7 +173,8 @@ module dcache_top (
       end
     end
   end
-
+  
+  genvar i;
   generate
       for (i = 0; i < `CACHE_WAY; i = i + 1) begin
           // For each element 'i' of the way_last_hit array,
@@ -184,7 +185,6 @@ module dcache_top (
 
 
   // generate cache
-  genvar i;
   generate
     for (i = 0; i < `CACHE_WAY; i = i + 1) begin
       custom_array #(
