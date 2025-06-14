@@ -1,4 +1,4 @@
-set cpu_freq 300
+set cpu_freq 200
 set icache 1
 set dcache 1
 set simple_dma 0
