@@ -3,7 +3,7 @@
 `define CACHE_SET 8
 `define CACHE_WAY 6
 `define DATA_WIDTH 32
-`define TIME_WIDTH 3
+`define TIME_WIDTH 4
 `define TAG_LEN 24
 `define INDEX_WIDTH 3
 `define LINE_LEN 256
@@ -134,13 +134,12 @@ module dcache_top (
   wire [`LINE_LEN   - 1:0] way_rdata    [`CACHE_WAY - 1:0]; // data read from each way
   wire [`LINE_LEN   - 1:0] way_wdata    [`CACHE_WAY - 1:0]; // data to be written to each way (calculated value)
   wire [`TIME_WIDTH - 1:0] way_last_hit [`CACHE_WAY - 1:0]; // last hit time for each way
-  reg  [`TIME_WIDTH - 1:0] last_hit     [`CACHE_SET - 1:0][`CACHE_WAY - 1:0]; // last hit time for each way
 
   // Single multi-bit signals (vectors) or registers
   // These are NOT arrays of ways, but single values.
   reg  [`TIME_WIDTH - 1:0]  lru_timestamp_counter; // timestamp for LRU (should be reg as it's assigned in always@posedge)
   wire [2:0]                hit_way_index;       // index of the way that was hit (vector, not array)
-  wire [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
+  reg  [2:0]                replaced_way;        // index of the way that was replaced (vector, not array)
 
   // Other internal signals that were previously problematic if declared as multi-dimensional arrays incorrectly
   // (Ensure these are declared correctly where they are defined/assigned)
@@ -151,39 +150,9 @@ module dcache_top (
   wire hit, miss, dirty, Bypass;
   wire w_done, r_done;
 
-  // prepare init value for last_hit_array for replacement
-  integer j;
-  always @(posedge clk) begin
-    if (rst) begin
-      for (j = 0; j < `CACHE_WAY; j = j + 1) begin
-        last_hit[0][j] <= j;
-        last_hit[1][j] <= j;
-        last_hit[2][j] <= j;
-        last_hit[3][j] <= j;
-        last_hit[4][j] <= j;
-        last_hit[5][j] <= j;
-        last_hit[6][j] <= j;
-        last_hit[7][j] <= j;
-      end
-    end else if (current_state == WAIT_CPU && hit) begin
-      for (j = 0; j < `CACHE_WAY; j = j + 1) begin
-        last_hit[index][j] <= way_hits[j] ?        0 :
-                              last_hit[index][j] + 1 ;
-      end
-    end
-  end
-  
-  genvar i;
-  generate
-      for (i = 0; i < `CACHE_WAY; i = i + 1) begin
-          // For each element 'i' of the way_last_hit array,
-          // assign it the corresponding element from the selected row of the last_hit memory.
-          assign way_last_hit[i] = last_hit[index][i];
-      end
-  endgenerate
-
 
   // generate cache
+  genvar i;
   generate
     for (i = 0; i < `CACHE_WAY; i = i + 1) begin
       custom_array #(
@@ -233,17 +202,17 @@ module dcache_top (
         .rdata(way_rdata[i])
       );
 
-//      custom_array #(
-//        .TARRAY_DATA_WIDTH(`TIME_WIDTH)
-//      ) last_hit_array (
-//        .clk(clk),
-//        .waddr(index),
-//        .raddr(index),
-//        .wen((current_state == WAIT_CPU) && way_hits[i]),
-//        .rst(rst),
-//        .wdata(lru_timestamp_counter), // write last hit time
-//        .rdata(way_last_hit[i])
-//      );
+      custom_array #(
+        .TARRAY_DATA_WIDTH(`TIME_WIDTH)
+      ) last_hit_array (
+        .clk(clk),
+        .waddr(index),
+        .raddr(index),
+        .wen((current_state == WAIT_CPU) && way_hits[i]),
+        .rst(rst),
+        .wdata(lru_timestamp_counter), // write last hit time
+        .rdata(way_last_hit[i])
+      );
     end
   endgenerate
 
@@ -256,8 +225,20 @@ module dcache_top (
     .data_3(way_last_hit[3]),
     .data_4(way_last_hit[4]),
     .data_5(way_last_hit[5]),
-    .replaced_way(replaced_way)
+    .replaced_way()
   );
+
+  // generate replacement logic
+  reg [1:0] replacement_reg;
+  always @(posedge clk) begin
+    if (rst) begin
+      replacement_reg <= 2'b0;
+    end
+    if ((current_state == REFILL) && r_done) begin
+      replacement_reg <= replacement_reg + 1;
+    end
+  end
+  assign replaced_way = replacement_reg;
 
   // generate the lru_timestamp_counter
   always @(posedge clk) begin
@@ -266,7 +247,6 @@ module dcache_top (
     else if ((current_state == WAIT_CPU) && from_cpu_mem_req_valid && hit && lru_timestamp_counter != 32'hffff_ffff)
       lru_timestamp_counter <= lru_timestamp_counter + 1;
   end
-
 
   // add a counter that counts the number of writes in states that need to
   // write to memory
@@ -440,23 +420,6 @@ module dcache_top (
 
 endmodule
 
-
-module replacement_simple (
-    input                        clk,
-    input                        rst,
-    input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
-                                 data_3, data_4, data_5,
-    output [              2 : 0] replaced_way
-);
-
-assign replaced_way = (data_0 == 5) ? 3'h0 :
-                      (data_1 == 5) ? 3'h1 :
-                      (data_2 == 5) ? 3'h2 :
-                      (data_3 == 5) ? 3'h3 :
-                      (data_4 == 5) ? 3'h4 :
-                      (data_5 == 5) ? 3'h5 : 3'b0; // Default to 0 if no way has last hit time of 5
-endmodule
-
 `define MAX_32_BIT 32'hffff_ffff
 module replacement (
     input                        clk,
@@ -527,4 +490,15 @@ module replacement (
         ({3{!full && least_5}} &       3'h5)
     };
 
+endmodule
+
+module replacement_simple (
+    input                        clk,
+    input                        rst,
+    input  [`TIME_WIDTH - 1 : 0] data_0, data_1, data_2,
+                                 data_3, data_4, data_5,
+    output [              2 : 0] replaced_way
+);
+
+assign replaced_way = 0;
 endmodule
