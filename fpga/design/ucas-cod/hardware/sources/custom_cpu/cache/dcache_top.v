@@ -217,7 +217,7 @@ module dcache_top (
   endgenerate
 
   // generate replacement logic
-  reg [1:0] replacement_reg;
+  reg replacement_reg;
   always @(posedge clk) begin
     if (rst) begin
       replacement_reg <= 2'b0;
