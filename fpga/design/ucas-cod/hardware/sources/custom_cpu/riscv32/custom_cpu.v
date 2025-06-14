@@ -479,42 +479,6 @@ module custom_cpu (
       .inst_retire(inst_retire) // Drive top-level output
     );
 
-    perf_counters perf_counters_inst (
-        .clk                    (clk),
-        .rst                    (rst),
-        .idu_branch_condition_out(idu_branch_condition_out), // From IDU
-        .idu_is_branch_out      (idu_is_branch_out), // From IDU
-        .pipeline_advance_enable(pipeline_advance_enable),
-        .ifu_IRWrite_out        (ifu_IRWrite_out), // From IFU
-        .mw_inst_valid_reg      (mw_inst_valid_reg), // From MEM/WB reg
-        .idu_mem_read_out       (idu_mem_read_out), // From IDU
-        .idu_mem_write_out      (idu_mem_write_out), // From IDU
-        .ifu_IF_stall_out       (ifu_IF_stall_out), // From IFU
-        .memu_mem_stall_out     (memu_mem_stall_out), // From MEMU
-        .ifu_IW_stall_out       (ifu_IW_stall_out), // From IFU
-        .memu_RDW_stall_out     (memu_RDW_stall_out), // From MEMU
-        .idu_is_jump_out        (idu_is_jump_out), // From IDU
-        .idu_is_nop_out         (idu_is_nop_out), // From IDU
-        .idu_is_alu_op_out      (idu_is_alu_op_out), // From IDU
-        .idu_is_shifter_op_out  (idu_is_shifter_op_out), // From IDU
-        .wb_rf_wen_internal     (wb_rf_wen_internal), // From MEM/WB reg
-        .cpu_perf_cnt_0         (cpu_perf_cnt_0),
-        .cpu_perf_cnt_1         (cpu_perf_cnt_1),
-        .cpu_perf_cnt_2         (cpu_perf_cnt_2),
-        .cpu_perf_cnt_3         (cpu_perf_cnt_3),
-        .cpu_perf_cnt_4         (cpu_perf_cnt_4),
-        .cpu_perf_cnt_5         (cpu_perf_cnt_5),
-        .cpu_perf_cnt_6         (cpu_perf_cnt_6),
-        .cpu_perf_cnt_7         (cpu_perf_cnt_7),
-        .cpu_perf_cnt_8         (cpu_perf_cnt_8),
-        .cpu_perf_cnt_9         (cpu_perf_cnt_9),
-        .cpu_perf_cnt_10        (cpu_perf_cnt_10),
-        .cpu_perf_cnt_11        (cpu_perf_cnt_11),
-        .cpu_perf_cnt_12        (cpu_perf_cnt_12),
-        .cpu_perf_cnt_13        (cpu_perf_cnt_13),
-        .cpu_perf_cnt_14        (cpu_perf_cnt_14),
-        .cpu_perf_cnt_15        (cpu_perf_cnt_15)
-    );
 
     // Address to memory (driven by EX/MEM register's ALU result if it's a mem op)
     // MEMU internal Address is alu_result_from_exmem
@@ -1197,44 +1161,3 @@ module fwdu (
 
 endmodule
 
-module perf_counters (
-  input clk,
-  input rst,
-
-  input idu_branch_condition_out,
-  input idu_is_branch_out,
-  input pipeline_advance_enable,
-  input ifu_IRWrite_out, // this signal changes when an instruction is fetched, used as increment sign
-  input mw_inst_valid_reg,
-  input idu_mem_read_out,
-  input idu_mem_write_out,
-  input ifu_IF_stall_out,
-  input memu_mem_stall_out,
-  input ifu_IW_stall_out,
-  input memu_RDW_stall_out,
-  input idu_is_jump_out,
-  input idu_is_alu_op_out,
-  input idu_is_shifter_op_out,
-  input idu_is_nop_out,
-  input wb_rf_wen_internal,
-
-  output [31:0] cpu_perf_cnt_0,
-  output [31:0] cpu_perf_cnt_1,
-  output [31:0] cpu_perf_cnt_2,
-  output [31:0] cpu_perf_cnt_3,
-  output [31:0] cpu_perf_cnt_4,
-  output [31:0] cpu_perf_cnt_5,
-  output [31:0] cpu_perf_cnt_6,
-  output [31:0] cpu_perf_cnt_7,
-  output [31:0] cpu_perf_cnt_8,
-  output [31:0] cpu_perf_cnt_9,
-  output [31:0] cpu_perf_cnt_10,
-  output [31:0] cpu_perf_cnt_11,
-  output [31:0] cpu_perf_cnt_12,
-  output [31:0] cpu_perf_cnt_13,
-  output [31:0] cpu_perf_cnt_14,
-  output [31:0] cpu_perf_cnt_15
-);
-
-
-endmodule
