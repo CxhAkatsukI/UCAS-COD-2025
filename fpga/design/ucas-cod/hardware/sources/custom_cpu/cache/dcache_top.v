@@ -133,7 +133,7 @@ module dcache_top (
   wire [`TAG_LEN    - 1:0] way_tags     [`CACHE_WAY - 1:0]; // tags for each way
   wire [`LINE_LEN   - 1:0] way_rdata    [`CACHE_WAY - 1:0]; // data read from each way
   wire [`LINE_LEN   - 1:0] way_wdata    [`CACHE_WAY - 1:0]; // data to be written to each way (calculated value)
-  reg  [`TIME_WIDTH - 1:0] way_last_hit [`CACHE_WAY - 1:0]; // last hit time for each way
+  wire [`TIME_WIDTH - 1:0] way_last_hit [`CACHE_WAY - 1:0]; // last hit time for each way
   reg  [`TIME_WIDTH - 1:0] last_hit     [`CACHE_SET - 1:0][`CACHE_WAY - 1:0]; // last hit time for each way
 
   // Single multi-bit signals (vectors) or registers
@@ -174,7 +174,7 @@ module dcache_top (
     end
   end
 
-  assign way_last_hit = last_hit[index]; // assign the last hit time for the current index
+  assign way_last_hit = last_hit[index][`CACHE_WAY - 1:0]; // assign the last hit time for the current index
 
 
   // generate cache
