@@ -52,6 +52,23 @@ module custom_cpu (
     output [69:0] inst_retire     // Driven by WBU
 );
 
+    assign cpu_perf_cnt_0 = 0;
+    assign cpu_perf_cnt_1 = 0;
+    assign cpu_perf_cnt_2 = 0;
+    assign cpu_perf_cnt_3 = 0;
+    assign cpu_perf_cnt_4 = 0;
+    assign cpu_perf_cnt_5 = 0;
+    assign cpu_perf_cnt_6 = 0;
+    assign cpu_perf_cnt_7 = 0;
+    assign cpu_perf_cnt_8 = 0;
+    assign cpu_perf_cnt_9 = 0;
+    assign cpu_perf_cnt_10 = 0;
+    assign cpu_perf_cnt_11 = 0;
+    assign cpu_perf_cnt_12 = 0;
+    assign cpu_perf_cnt_13 = 0;
+    assign cpu_perf_cnt_14 = 0;
+    assign cpu_perf_cnt_15 = 0;
+
     //--------------------------------------------------------------------------
     // Internal Pipeline Control Signals
     //--------------------------------------------------------------------------
