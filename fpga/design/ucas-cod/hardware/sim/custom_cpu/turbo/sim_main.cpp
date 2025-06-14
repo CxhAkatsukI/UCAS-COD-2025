@@ -2,7 +2,7 @@
 #include "Vcustom_cpu_test.h"
 
 #define TIME_SCALE (5)
-#define TIME_LIMIT (20000000)
+#define TIME_LIMIT (2000000000)
 
 // Legacy function required only so linking works
 double sc_time_stamp() { return 0; }

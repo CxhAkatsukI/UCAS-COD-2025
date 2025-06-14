@@ -174,7 +174,13 @@ module dcache_top (
     end
   end
 
-  assign way_last_hit = last_hit[index][`CACHE_WAY - 1:0]; // assign the last hit time for the current index
+  generate
+      for (i = 0; i < `CACHE_WAY; i = i + 1) begin
+          // For each element 'i' of the way_last_hit array,
+          // assign it the corresponding element from the selected row of the last_hit memory.
+          assign way_last_hit[i] = last_hit[index][i];
+      end
+  endgenerate
 
 
   // generate cache
