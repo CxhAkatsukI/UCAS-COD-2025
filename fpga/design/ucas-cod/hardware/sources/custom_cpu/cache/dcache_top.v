@@ -225,20 +225,8 @@ module dcache_top (
     .data_3(way_last_hit[3]),
     .data_4(way_last_hit[4]),
     .data_5(way_last_hit[5]),
-    .replaced_way()
+    .replaced_way(replaced_way)
   );
-
-  // generate replacement logic
-  reg [1:0] replacement_reg;
-  always @(posedge clk) begin
-    if (rst) begin
-      replacement_reg <= 2'b0;
-    end
-    if ((current_state == REFILL) && r_done) begin
-      replacement_reg <= replacement_reg + 1;
-    end
-  end
-  assign replaced_way = replacement_reg;
 
   // generate the lru_timestamp_counter
   always @(posedge clk) begin
