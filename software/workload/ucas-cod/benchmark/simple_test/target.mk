@@ -1,2 +1,2 @@
 
-BENCH_GROUP := hello microbench
+BENCH_GROUP := dnn_test
