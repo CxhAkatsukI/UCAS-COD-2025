@@ -71,9 +71,6 @@ void convolution() {
   short *weight = (short *)addr.weight_addr;
   short *out = (short *)addr.wr_addr;
 
-  unsigned output_offset = 0;
-  unsigned input_offset = 0;
-
   unsigned input_fm_w = rd_size.d3;
   unsigned input_fm_h = rd_size.d2;
 
@@ -144,7 +141,6 @@ void pooling() {
   short *in = (short *)addr.wr_addr;
 
   unsigned output_offset = 0;
-  unsigned input_offset = 0;
 
   unsigned input_fm_w = conv_size.d3;
   unsigned input_fm_h = conv_size.d2;
