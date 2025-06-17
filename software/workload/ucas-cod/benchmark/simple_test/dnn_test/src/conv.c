@@ -1,6 +1,7 @@
 #include "div.h"
 #include "mul.h"
 #include "printf.h"
+#include "perf_cnt.h"
 #include "trap.h"
 
 #define FRAC_BIT 10
