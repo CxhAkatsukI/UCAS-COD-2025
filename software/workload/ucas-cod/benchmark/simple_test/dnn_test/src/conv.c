@@ -1,7 +1,7 @@
 #include "div.h"
 #include "mul.h"
-#include "printf.h"
 #include "perf_cnt.h"
+#include "printf.h"
 #include "trap.h"
 
 #define FRAC_BIT 10
@@ -66,152 +66,166 @@ struct size_vec4 conv_size;
 extern char _binary_data_result_bin_start[];
 extern char _binary_data_result_bin_size[];
 
-void convolution()
-{
-        short *in = (short *)addr.rd_addr;
-        short *weight = (short *)addr.weight_addr;
-        short *out = (short *)addr.wr_addr;
+void convolution() {
+  short *in = (short *)addr.rd_addr;
+  short *weight = (short *)addr.weight_addr;
+  short *out = (short *)addr.wr_addr;
 
-        unsigned output_offset = 0;
-        unsigned input_offset = 0;
+  unsigned input_fm_w = rd_size.d3;
+  unsigned input_fm_h = rd_size.d2;
 
-        unsigned input_fm_w = rd_size.d3;
-        unsigned input_fm_h = rd_size.d2;
+  unsigned pad = KERN_ATTR_CONV_PAD;
+  unsigned pad_len = pad << 1;
 
-        unsigned pad = KERN_ATTR_CONV_PAD;
-        unsigned pad_len = pad << 1;
+  unsigned conv_out_w = rd_size.d3 - weight_size.d3 + pad_len;
+  unsigned conv_out_h = rd_size.d2 - weight_size.d2 + pad_len;
 
-        unsigned conv_out_w = rd_size.d3 - weight_size.d3 + pad_len;
-        unsigned conv_out_h = rd_size.d2 - weight_size.d2 + pad_len;
+  unsigned stride = KERN_ATTR_CONV_STRIDE;
 
-        unsigned stride = KERN_ATTR_CONV_STRIDE;
+  conv_out_w = div(conv_out_w, stride);
+  conv_out_h = div(conv_out_h, stride);
 
-        conv_out_w = div(conv_out_w, stride);
-        conv_out_h = div(conv_out_h, stride);
+  conv_out_w++;
+  conv_out_h++;
 
-        conv_out_w++;
-        conv_out_h++;
+  conv_size.d0 = wr_size.d0;
+  conv_size.d1 = wr_size.d1;
+  conv_size.d2 = conv_out_h;
+  conv_size.d3 = conv_out_w;
 
-        conv_size.d0 = wr_size.d0;
-        conv_size.d1 = wr_size.d1;
-        conv_size.d2 = conv_out_h;
-        conv_size.d3 = conv_out_w;
+  // TODO: Please add your implementation here
+  int no, ni, y, x, ky, kx;
+  int input_size_aligned = mul(RD_SIZE_D2, RD_SIZE_D3);
+  int output_size_aligned = mul(conv_out_h, conv_out_w);
+  int weight_size_aligned = mul(WEIGHT_SIZE_D2, WEIGHT_SIZE_D3) + 1;
+  int weight_size_grouped = mul(weight_size_aligned, RD_SIZE_D1);
+  int bias_index = 0;
+  int output_no_offset = 0;
+  int output_y_offset = 0;
+  int input_ni_offset = 0;
+  int weight_no_offset = 0;
+  int weight_ni_offset = 0;
+  int y_stride = 0;
+  int x_stride = 0;
 
-        // TODO: Please add your implementation here
-        int no, ni, y, x, ky, kx, ih, iw, stride_y, stride_x;
-        short bias;
+  for (no = 0; no < wr_size.d1; no++) {
+    int bias = weight[bias_index];
+    input_ni_offset = 0;
+    weight_ni_offset = 0;
+    for (ni = 0; ni < rd_size.d1; ni++) {
+      output_y_offset = 0;
+      y_stride = 0;
+      for (y = 0; y < conv_out_h; y++) {
+        x_stride = 0;
+        for (x = 0; x < conv_out_w; x++) {
+          int sum = 0;
+          int output_index = output_no_offset + output_y_offset + x;
+          if (ni == 0) {
+            out[output_index] = bias;
+          }
+          for (ky = 0; ky < weight_size.d2; ky++) {
+            int input_y = y_stride + ky - pad;
+            int input_input_y_offset = mul(RD_SIZE_D3, input_y);
+            int weight_input_y_offset = mul(WEIGHT_SIZE_D3, ky);
+            for (kx = 0; kx < weight_size.d3; kx++) {
+              int input_x = x_stride + kx - pad;
 
-        int in_square = mul(input_fm_h, input_fm_w);
-        int weight_square = 1 + mul(WEIGHT_SIZE_D2, WEIGHT_SIZE_D3);
-        int weight_no_offset, weight_offset;
-        int temp;
-        for (no = 0; no < conv_size.d1; no++) {
-                // weight[no];
-                weight_no_offset = mul(no, mul(rd_size.d1, weight_square));
-                // weight[no][0][0]
-                bias = weight[weight_no_offset];
-                for (ni = 0; ni < rd_size.d1; ni++) {
-                        // in[ni]
-                        int in_ni_offset = mul(ni, in_square);
-                        // weight[no][ni] + 1
-                        int weight_ni_offset = weight_no_offset + mul(ni, weight_square) + 1;
-                        for (y = 0; y < conv_out_h; y++) {
-                                stride_y = mul(stride, y);
-                                stride_x = 0;
-                                for (x = 0; x < conv_out_w; x++) {
-                                        temp = 0;
-                                        for (ky = 0; ky < WEIGHT_SIZE_D2; ky++) {
-                                                ih = ky + stride_y - pad;
-                                                // in[ni][ih]
-                                                int in_line_offset = mul(ih, input_fm_w);
-                                                // weight[no][ni][ky]
-                                                int weight_line_offset = mul(ky, WEIGHT_SIZE_D3);
-                                                for (kx = 0; kx < WEIGHT_SIZE_D3; kx++) {
-                                                        iw = kx + stride_x - pad;
-                                                        if (iw >= 0 && ih >= 0 && iw < input_fm_w && ih < input_fm_h) {
-                                                                // in[ni][ih][iw]
-                                                                input_offset = in_ni_offset + in_line_offset + iw;
-                                                                // weight[no][ni][ky][kx]
-                                                                weight_offset = weight_ni_offset + weight_line_offset + kx;
-                                                                temp += mul(in[input_offset], weight[weight_offset]);
-                                                        }
-                                                }
-                                        }
-                                        out[output_offset] = (temp >> FRAC_BIT) + bias;
-                                        output_offset++;
-                                        stride_x += stride;
-                                }
-                        }
-                }
+              if (input_y >= 0 && input_y < input_fm_h && input_x >= 0 &&
+                  input_x < input_fm_w) {
+                int input_index =
+                    input_ni_offset + input_input_y_offset + input_x;
+                int weight_index = weight_no_offset + weight_ni_offset +
+                                   weight_input_y_offset + kx + 1;
+
+                sum += mul(in[input_index], weight[weight_index]);
+              }
+            }
+          }
+          x_stride += stride;
+          out[output_index] += sum >> FRAC_BIT;
         }
+        output_y_offset += conv_out_w;
+        y_stride += stride;
+      }
+      input_ni_offset += input_size_aligned;
+      weight_ni_offset += weight_size_aligned;
+    }
+    bias_index += weight_size_aligned;
+    output_no_offset += output_size_aligned;
+    weight_no_offset += weight_size_grouped;
+  }
 }
 
-void pooling()
-{
-        short *out = (short *)addr.wr_addr;
+void pooling() {
+  short *out = (short *)addr.wr_addr;
+  short *in = (short *)addr.wr_addr;
 
-        unsigned output_offset = 0;
-        unsigned input_offset = 0;
+  unsigned output_offset = 0;
 
-        unsigned input_fm_w = conv_size.d3;
-        unsigned input_fm_h = conv_size.d2;
+  unsigned input_fm_w = conv_size.d3;
+  unsigned input_fm_h = conv_size.d2;
 
-        unsigned pad = KERN_ATTR_POOL_PAD;
-        unsigned pad_len = pad << 1;
+  unsigned pad = KERN_ATTR_POOL_PAD;
+  unsigned pad_len = pad << 1;
 
-        unsigned pad_w_test = conv_size.d3 - KERN_ATTR_POOL_KERN_SIZE;
-        unsigned pad_h_test = conv_size.d2 - KERN_ATTR_POOL_KERN_SIZE;
+  unsigned pad_w_test = conv_size.d3 - KERN_ATTR_POOL_KERN_SIZE;
+  unsigned pad_h_test = conv_size.d2 - KERN_ATTR_POOL_KERN_SIZE;
 
-        unsigned pool_out_w = pad_w_test + pad_len;
-        unsigned pool_out_h = pad_h_test + pad_len;
+  unsigned pool_out_w = pad_w_test + pad_len;
+  unsigned pool_out_h = pad_h_test + pad_len;
 
-        unsigned stride = KERN_ATTR_POOL_STRIDE;
+  unsigned stride = KERN_ATTR_POOL_STRIDE;
 
-        unsigned pad_w_test_remain = pad_w_test - mul(div(pad_w_test, stride), stride);
-        unsigned pad_h_test_remain = pad_h_test - mul(div(pad_h_test, stride), stride);
+  unsigned pad_w_test_remain =
+      pad_w_test - mul(div(pad_w_test, stride), stride);
+  unsigned pad_h_test_remain =
+      pad_h_test - mul(div(pad_h_test, stride), stride);
 
-        pool_out_w = div(pool_out_w, stride);
-        pool_out_h = div(pool_out_h, stride);
-        pool_out_w++;
-        pool_out_h++;
+  pool_out_w = div(pool_out_w, stride);
+  pool_out_h = div(pool_out_h, stride);
+  pool_out_w++;
+  pool_out_h++;
 
-        if ((!pad) && (pad_w_test_remain || pad_h_test_remain)) {
-                pool_out_w++;
-                pool_out_h++;
+  if ((!pad) && (pad_w_test_remain || pad_h_test_remain)) {
+    pool_out_w++;
+    pool_out_h++;
+  }
+
+  // TODO: Please add your implementation here
+  int no;
+  int oy_offset = 0;
+  int ox_offset = 0;
+  int input_y_offset = 0;
+  for (no = 0; no < conv_size.d1; no++) {
+    unsigned current_channel_input_base = mul(no, mul(input_fm_h, input_fm_w));
+    oy_offset = 0;
+    for (int oy = 0; oy < pool_out_h; oy++) {
+      ox_offset = 0;
+      for (int ox = 0; ox < pool_out_w; ox++) {
+        short max = -32768;
+        for (int ky = 0; ky < KERN_ATTR_POOL_KERN_SIZE; ky++) {
+          int input_y = oy_offset + ky - pad;
+          input_y_offset = mul(input_y, input_fm_w);
+          for (int kx = 0; kx < KERN_ATTR_POOL_KERN_SIZE; kx++) {
+            int input_x = ox_offset + kx - pad;
+
+            if (input_y >= 0 && input_y < input_fm_h && input_x >= 0 &&
+                input_x < input_fm_w) {
+              int input_index =
+                  current_channel_input_base + input_y_offset + input_x;
+              if (in[input_index] > max) {
+                max = in[input_index];
+              }
+            }
+          }
         }
-
-        // TODO: Please add your implementation here
-        int in_square = mul(input_fm_h, input_fm_w);
-        int y, x, ky, kx, no, iw, ih;
-        short max, value;
-        int stride_y, stride_x, in_line_offset, input_no_offset;
-        for (no = 0; no < conv_size.d1; no++) {
-                input_no_offset = mul(no, in_square);
-                for (y = 0; y < pool_out_h; y++) {
-                        stride_y = mul(y, stride);
-                        stride_x = 0;
-                        for (x = 0; x < pool_out_w; x++) {
-                                max = 1 << 15;
-                                for (ky = 0; ky < KERN_ATTR_POOL_KERN_SIZE; ky++) {
-                                        ih = ky + stride_y - pad;
-                                        in_line_offset = mul(ih, input_fm_w);
-                                        for (kx = 0; kx < KERN_ATTR_POOL_KERN_SIZE; kx++) {
-                                                iw = kx + stride_x - pad;
-                                                if (iw < 0 || ih < 0 || ih >= input_fm_h || iw >= input_fm_w) {
-                                                        value = 0;
-                                                } else {
-                                                        input_offset = input_no_offset + in_line_offset + iw;
-                                                        value = out[input_offset];
-                                                }
-                                                max = (max < value) ? value : max;
-                                        }
-                                }
-                                out[output_offset] = max;
-                                output_offset++;
-                                stride_x += stride;
-                        }
-                }
-        }
+        out[output_offset] = max;
+        output_offset++;
+        ox_offset += stride;
+      }
+      oy_offset += stride;
+    }
+  }
 }
 
 #ifdef USE_HW_ACCEL
@@ -221,9 +235,9 @@ void launch_hw_accel() {
 
   // TODO: Please add your implementation here
   *gpio_start |= 0x1;
-  while (!(* gpio_done & 0x1)) {
-      ; // Wait for the hardware accelerator to finish
-    }
+  while (!(*gpio_done & 0x1)) {
+    ; // Wait for the hardware accelerator to finish
+  }
 }
 #endif
 
@@ -273,21 +287,36 @@ int main() {
   int result = comparing();
 
   printf("    Cycles:                    %u\n", (unsigned int)res.msec);
-  printf("    Retired Instructions:      %u\n", (unsigned int)res.perf_retired_inst_count);
-  printf("    Retired Loads:             %u\n", (unsigned int)res.perf_retired_load_count);
-  printf("    Retired Stores:            %u\n", (unsigned int)res.perf_retired_store_count);
-  printf("    Branches Executed:         %u\n", (unsigned int)res.perf_branch_executed_count);
-  printf("    Branches Taken:            %u\n", (unsigned int)res.perf_branch_taken_count);
-  printf("    IF Stalls:                 %u\n", (unsigned int)res.perf_if_stall_count);
-  printf("    MEM Access Stalls:         %u\n", (unsigned int)res.perf_mem_access_stall_count);
-  printf("    IW Stalls:                 %u\n", (unsigned int)res.perf_iw_stall_count);
-  printf("    RDW Stalls:                %u\n", (unsigned int)res.perf_rdw_stall_count);
-  printf("    Jumps Executed:            %u\n", (unsigned int)res.perf_jump_executed_count);
-  printf("    ALU Ops Executed:          %u\n", (unsigned int)res.perf_alu_op_executed_count);
-  printf("    Shift Ops Executed:        %u\n", (unsigned int)res.perf_shift_op_executed_count);
-  printf("    NOPs in ID:                %u\n", (unsigned int)res.perf_nop_in_id_count);
-  printf("    Total MEM Ops Issued:      %u\n", (unsigned int)res.perf_total_mem_ops_count);
-  printf("    Register Writes:           %u\n", (unsigned int)res.perf_reg_writes_count);
+  printf("    Retired Instructions:      %u\n",
+         (unsigned int)res.perf_retired_inst_count);
+  printf("    Retired Loads:             %u\n",
+         (unsigned int)res.perf_retired_load_count);
+  printf("    Retired Stores:            %u\n",
+         (unsigned int)res.perf_retired_store_count);
+  printf("    Branches Executed:         %u\n",
+         (unsigned int)res.perf_branch_executed_count);
+  printf("    Branches Taken:            %u\n",
+         (unsigned int)res.perf_branch_taken_count);
+  printf("    IF Stalls:                 %u\n",
+         (unsigned int)res.perf_if_stall_count);
+  printf("    MEM Access Stalls:         %u\n",
+         (unsigned int)res.perf_mem_access_stall_count);
+  printf("    IW Stalls:                 %u\n",
+         (unsigned int)res.perf_iw_stall_count);
+  printf("    RDW Stalls:                %u\n",
+         (unsigned int)res.perf_rdw_stall_count);
+  printf("    Jumps Executed:            %u\n",
+         (unsigned int)res.perf_jump_executed_count);
+  printf("    ALU Ops Executed:          %u\n",
+         (unsigned int)res.perf_alu_op_executed_count);
+  printf("    Shift Ops Executed:        %u\n",
+         (unsigned int)res.perf_shift_op_executed_count);
+  printf("    NOPs in ID:                %u\n",
+         (unsigned int)res.perf_nop_in_id_count);
+  printf("    Total MEM Ops Issued:      %u\n",
+         (unsigned int)res.perf_total_mem_ops_count);
+  printf("    Register Writes:           %u\n",
+         (unsigned int)res.perf_reg_writes_count);
 
   printf("benchmark finished\n");
 
