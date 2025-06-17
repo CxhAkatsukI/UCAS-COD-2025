@@ -207,7 +207,7 @@ void launch_hw_accel() {
 
   // TODO: Please add your implementation here
   *gpio_start |= 0x1;
-  while (!（* gpio_done & 0x1)) {
+  while (!(* gpio_done & 0x1)) {
       ; // Wait for the hardware accelerator to finish
     }
 }
