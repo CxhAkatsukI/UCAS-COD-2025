@@ -38,3 +38,5 @@ ifneq ($(PRJ_HW_MK),)
 include fpga/design/$(FPGA_PRJ)/$(PRJ_HW_MK)
 endif
 
+clean:
+	rm -rf fpga/sim_out/custom_cpu

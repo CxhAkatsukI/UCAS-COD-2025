@@ -41,6 +41,8 @@ TARGET := $(BENCH)
 ELFS := $(addprefix $(ARCH)/elf/,$(TARGET))
 
 all: $(ELFS)
+	@rm -rf $(ARCH)/trace
+	@mkdir -p $(ARCH)/trace
 
 $(ARCH)/elf/%: $(COMMON_O) $(ARCH)/obj/%/bench.o $(ARCH)/obj/%.o
 	@mkdir -p $(DIR_OBJS)

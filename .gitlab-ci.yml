@@ -221,6 +221,7 @@ fpga_eval:
     - nfv3_for_cod_v8
   script:
     - bash ./fpga/design/ucas-cod/run/example/fpga_run.sh $TARGET_DESIGN
+    - sleep 300
   rules:
     - if: '$TARGET_DESIGN =~ /^(example|alu|reg_file)$/'
   dependencies:

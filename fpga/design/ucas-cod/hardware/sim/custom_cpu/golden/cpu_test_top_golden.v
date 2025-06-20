@@ -12,10 +12,11 @@
 */
 
 /* verilator lint_off PINMISSING */
+/* verilator lint_off UNOPTFLAT */
 
 `timescale 10 ns / 1 ns
 
-module cpu_test_top  #
+module cpu_test_top_golden  #
 (
     // Width of data bus in bits
     parameter DATA_WIDTH = 32,
@@ -196,7 +197,7 @@ module cpu_test_top  #
   wire [4:0]  random_mask;
 
   //custom CPU core
-  custom_cpu	u_cpu (	
+  custom_cpu_golden	u_cpu (	
 	.clk	        (cpu_clk),
 	.rst	        (~cpu_reset_n),
 	  
@@ -220,11 +221,7 @@ module cpu_test_top  #
 	.Read_data_Ready (Read_data_Ready)
   );
 
-`ifdef USE_ICACHE 
-  icache_wrapper  u_icache_wrapper (
-`else
   inst_if_wrapper u_inst_if_wrapper (
-`endif
 	.cpu_clk        (cpu_clk),
 	.cpu_reset      (~cpu_reset_n),
 
@@ -249,11 +246,7 @@ module cpu_test_top  #
 	.cpu_inst_rlast   (cpu_inst_rlast )
   );
 
-`ifdef USE_DCACHE 
-  dcache_wrapper  u_dcache_wrapper (
-`else
-  mem_if_wrapper  u_mem_if_wrapper (
-`endif
+  mem_if_wrapper    u_mem_if_wrapper (
 	.cpu_clk        (cpu_clk),
 	.cpu_reset      (~cpu_reset_n),
 
@@ -275,26 +268,26 @@ module cpu_test_top  #
 	.cpu_mem_arburst  (cpu_mem_arburst),
 	.cpu_mem_arlen    (cpu_mem_arlen  ),
 	                      
+	.cpu_mem_rdata    (cpu_mem_rdata_memwp),
+	.cpu_mem_rready   (cpu_mem_rready),
+	.cpu_mem_rvalid   (cpu_mem_rvalid_memwp),
+	.cpu_mem_rlast    (cpu_mem_rlast ),
+
 	.cpu_mem_awaddr   (cpu_mem_awaddr ),
 	.cpu_mem_awready  (cpu_mem_awready_memwp),
 	.cpu_mem_awvalid  (cpu_mem_awvalid),
 	.cpu_mem_awsize   (cpu_mem_awsize ),
 	.cpu_mem_awburst  (cpu_mem_awburst),
 	.cpu_mem_awlen    (cpu_mem_awlen  ),
-	                      
-	.cpu_mem_bready   (cpu_mem_bready),
-	.cpu_mem_bvalid   (cpu_mem_bvalid),
-	                      
-	.cpu_mem_rdata    (cpu_mem_rdata ),
-	.cpu_mem_rready   (cpu_mem_rready),
-	.cpu_mem_rvalid   (cpu_mem_rvalid),
-	.cpu_mem_rlast    (cpu_mem_rlast ),
-	                      
+
 	.cpu_mem_wdata    (cpu_mem_wdata ),
 	.cpu_mem_wready   (cpu_mem_wready_memwp),
 	.cpu_mem_wstrb    (cpu_mem_wstrb ),
 	.cpu_mem_wvalid   (cpu_mem_wvalid),
-	.cpu_mem_wlast    (cpu_mem_wlast )
+	.cpu_mem_wlast    (cpu_mem_wlast ),
+
+	.cpu_mem_bready   (cpu_mem_bready),
+	.cpu_mem_bvalid   (cpu_mem_bvalid)
   );
 
   uart_sim #(.UART_SIM(0)) u_uart_sim (
@@ -330,6 +323,11 @@ module cpu_test_top  #
 	.cpu_mem_arburst  (cpu_mem_arburst),
 	.cpu_mem_arlen    (cpu_mem_arlen  ),
 	                      
+	.cpu_mem_rdata    (cpu_mem_rdata ),
+	.cpu_mem_rready   (cpu_mem_rready),
+	.cpu_mem_rvalid   (cpu_mem_rvalid),
+	.cpu_mem_rlast    (cpu_mem_rlast ),
+
 	.cpu_mem_awaddr   (cpu_mem_awaddr[31:0]),
 	.cpu_mem_awready  (cpu_mem_awready),
 	.cpu_mem_awvalid  (cpu_mem_awvalid_axi),
@@ -337,19 +335,14 @@ module cpu_test_top  #
 	.cpu_mem_awburst  (cpu_mem_awburst),
 	.cpu_mem_awlen    (cpu_mem_awlen  ),
 	                      
-	.cpu_mem_bready   (cpu_mem_bready),
-	.cpu_mem_bvalid   (cpu_mem_bvalid),
-	                      
-	.cpu_mem_rdata    (cpu_mem_rdata ),
-	.cpu_mem_rready   (cpu_mem_rready),
-	.cpu_mem_rvalid   (cpu_mem_rvalid),
-	.cpu_mem_rlast    (cpu_mem_rlast ),
-	                      
 	.cpu_mem_wdata    (cpu_mem_wdata ),
 	.cpu_mem_wready   (cpu_mem_wready),
 	.cpu_mem_wstrb    (cpu_mem_wstrb ),
 	.cpu_mem_wvalid   (cpu_mem_wvalid_axi),
 	.cpu_mem_wlast    (cpu_mem_wlast ),
+
+	.cpu_mem_bready   (cpu_mem_bready),
+	.cpu_mem_bvalid   (cpu_mem_bvalid),
 	
 	.s_axi_awid      (s_axi_awid),
 	.s_axi_awaddr    (s_axi_awaddr),
@@ -436,5 +429,3 @@ module cpu_test_top  #
   );
 
 endmodule
-
-
