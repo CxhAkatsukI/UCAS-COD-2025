@@ -234,8 +234,8 @@ module engine_core #(
   wire [27:0] total_burst_num = dma_size[31:5] + (|dma_size[4:0]);
   wire [2:0] last_burst_len = dma_size[4:2] - {2'b0, !(|dma_size[1:0])};
 
-  wire rd_complete = (rd_counter == total_burst_num) && (rd_counter != 0);
-  wire wr_complete = (wr_counter == total_burst_num) && (wr_counter != 0);
+  assign rd_complete = (rd_counter == total_burst_num) && (rd_counter != 0);
+  assign wr_complete = (wr_counter == total_burst_num) && (wr_counter != 0);
 
   assign rd_req_addr = src_base + tail_ptr + {rd_counter, 5'b0};
   assign rd_req_len = (rd_counter == total_burst_num - 1) ? last_burst_len : 5'd7;
