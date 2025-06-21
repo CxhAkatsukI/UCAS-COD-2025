@@ -8,4 +8,4 @@ variables:
   # CPU frequency must be a decimal value
   CPU_FREQ: 100
 
-  SIM_DUT_TYPE: "dma_test"
+  SIM_DUT_TYPE: "dnn_test"
