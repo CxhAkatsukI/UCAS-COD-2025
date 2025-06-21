@@ -1,614 +1,872 @@
+// timescale directive: simulation time unit is 10ns, precision is 1ns
 `timescale 10ns / 1ns
 
-module custom_cpu(
-	input         clk,
-	input         rst,
+// Macro definitions for bus widths
+`define ADDR_WIDTH 5  // Register file address width
+`define DATA_WIDTH 32 // Data bus width
 
-	//Instruction request channel
-	output [31:0] PC,
-	output        Inst_Req_Valid,
-	input         Inst_Req_Ready,
+//==============================================================================
+// Module: custom_cpu
+// Description: A simple MIPS-like CPU core with integrated control logic.
+//              (Code organized by strict pipeline stage definitions)
+//==============================================================================
+module custom_cpu (
+    input clk,
+    input rst,
 
-	//Instruction response channel
-	input  [31:0] Instruction,
-	input         Inst_Valid,
-	output        Inst_Ready,
+    //Instruction request channel
+    output [31:0] PC,
+    output        Inst_Req_Valid,
+    input         Inst_Req_Ready,
 
-	//Memory request channel
-	output [31:0] Address,
-	output        MemWrite,
-	output [31:0] Write_data,
-	output [ 3:0] Write_strb,
-	output        MemRead,
-	input         Mem_Req_Ready,
+    //Instruction response channel
+    input  [31:0] Instruction,
+    input         Inst_Valid,
+    output        Inst_Ready,
 
-	//Memory data response channel
-	input  [31:0] Read_data,
-	input         Read_data_Valid,
-	output        Read_data_Ready,
+    //Memory request channel
+    output [31:0] Address,
+    output        MemWrite,
+    output [31:0] Write_data,
+    output [ 3:0] Write_strb,
+    output        MemRead,
+    input         Mem_Req_Ready,
 
-	input         intr,
+    //Memory data response channel
+    input  [31:0] Read_data,
+    input         Read_data_Valid,
+    output        Read_data_Ready,
 
-	output [31:0] cpu_perf_cnt_0,
-	output [31:0] cpu_perf_cnt_1,
-	output [31:0] cpu_perf_cnt_2,
-	output [31:0] cpu_perf_cnt_3,
-	output [31:0] cpu_perf_cnt_4,
-	output [31:0] cpu_perf_cnt_5,
-	output [31:0] cpu_perf_cnt_6,
-	output [31:0] cpu_perf_cnt_7,
-	output [31:0] cpu_perf_cnt_8,
-	output [31:0] cpu_perf_cnt_9,
-	output [31:0] cpu_perf_cnt_10,
-	output [31:0] cpu_perf_cnt_11,
-	output [31:0] cpu_perf_cnt_12,
-	output [31:0] cpu_perf_cnt_13,
-	output [31:0] cpu_perf_cnt_14,
-	output [31:0] cpu_perf_cnt_15,
+    input intr,
 
-	output [69:0] inst_retire
+    output [31:0] cpu_perf_cnt_0,
+    output [31:0] cpu_perf_cnt_1,
+    output [31:0] cpu_perf_cnt_2,
+    output [31:0] cpu_perf_cnt_3,
+    output [31:0] cpu_perf_cnt_4,
+    output [31:0] cpu_perf_cnt_5,
+    output [31:0] cpu_perf_cnt_6,
+    output [31:0] cpu_perf_cnt_7,
+    output [31:0] cpu_perf_cnt_8,
+    output [31:0] cpu_perf_cnt_9,
+    output [31:0] cpu_perf_cnt_10,
+    output [31:0] cpu_perf_cnt_11,
+    output [31:0] cpu_perf_cnt_12,
+    output [31:0] cpu_perf_cnt_13,
+    output [31:0] cpu_perf_cnt_14,
+    output [31:0] cpu_perf_cnt_15,
+
+    output [69:0] inst_retire
 );
 
-/* The following signal is leveraged for behavioral simulation, 
+
+  // TODO: Please add your custom CPU code here
+
+  //----------------------------------------------------------------------------
+  // Internal Wires - Connecting Logic Blocks and Modules
+  // (Grouped here for clarity, used across stages)
+  //----------------------------------------------------------------------------
+
+  //-- Signals generated in ID (purely from Instruction) --
+  wire [ 5:0] opcode;               // Opcode field
+  wire [ 4:0] rs;                   // Source register 1 specifier
+  wire [ 4:0] rt;                   // Source register 2 specifier / Branch Func
+  wire [ 4:0] rd;                   // Destination register specifier (R-type)
+  wire [ 4:0] shamt;                // Shift amount (R-type shift)
+  wire [ 5:0] funct;                // Function field (R-type)
+  wire [15:0] imm_16;               // 16-bit immediate value
+  wire [25:0] imm_J;                // 26-bit immediate for jump
+  wire [31:0] imm_SE;               // Sign-extended immediate
+  wire [31:0] imm_0E;               // Zero-extended immediate
+  wire [31:0] imm_B_ext;            // Sign-extended branch immediate
+  wire [31:0] lui_result;           // Result for LUI instruction
+  wire        use_zero_extend;      // Control for immediate extension type
+  reg  [ 9:0] current_state;        // Current state of the FSM
+  reg  [ 9:0] next_state;           // Next state of the FSM
+  reg  [31:0] IR;                   // Instruction Register (holds current instruction)
+
+  wire        reg_dst_input;          // Selects destination register (rd/rt/ra hint)
+  wire        is_branch;              // Indicates Branch instruction
+  wire        branch_condition_satisfied; // Indicates branch condition is satisfied
+  wire        mem_read_internal;      // Internal Memory read enable (Load)
+  wire        mem_write_internal;     // Internal Memory write enable (Store)
+  wire        alu_src_imm_input;      // Selects ALU source 2 (Reg/Imm)
+  wire        reg_write_cond;         // Precondition for register write enable (base check)
+  wire        alu_op_ok;              // Indicates ALUOp can be derived from opcode
+  wire [ 2:0] alu_op_cond;            // ALU operation hint from opcode
+  wire        is_alu_operation;       // Indicates an ALU operation is needed
+  wire        is_shift_operation;     // Indicates a Shift operation is needed
+  wire [ 2:0] alu_op;                 // Decoded ALU operation (R/I type)
+  wire [ 1:0] shifter_op;             // Decoded Shift operation type
+  wire        is_shamt;               // Indicates shamt is used for shift amount
+  wire        is_zero_cmp;            // Indicates branch compares rs against zero
+  wire        is_move;                // Indicates MOVZ/MOVN
+  wire        is_lui;                 // Indicates LUI instruction
+  wire        is_load;                // Indicates Load instruction
+  wire        is_store;               // Indicates Store instruction
+  wire        is_load_store;          // Indicates Load/Store instruction
+  wire [ 2:0] move_alu_op;            // ALU operation code for MOVZ/MOVN
+  wire        is_jump;                // Indicates any Jump instruction occurred (J, JAL, JR, JALR)
+  wire        is_link_jump;           // Indicates JAL or JALR instruction
+  wire        is_j_instr;
+  wire        is_jal_instr;
+  wire        is_jr_instr;
+  wire        is_jalr_instr;
+  wire        is_REGIMM;
+  wire        NOP;                    // Indicates NOP instruction (all bits 0)
+  wire        write_disallowed;       // Instr. type that never writes back
+  wire        intermediate_reg_write_cond; // Base write condition refined
+
+  //-- Signals from Register File (ID Stage Read) --
+  wire [31:0] RF_rdata1;              // Data read from RegFile port 1 (rs)
+  wire [31:0] RF_rdata2;              // Data read from RegFile port 2 (rt)
+
+  //-- Signals from/for PC Path (Generated/Used across stages) --
+  wire [31:0] next_pc;                // Next program counter value (Calculated in EX)
+  wire [31:0] current_pc;             // Current program counter value (from PC module in IF)
+  wire [31:0] pc_store;               // PC+8 for JAL/JALR link address (Calculated in EX)
+
+  //-- Signals from ALU/Shifter Path (Generated in EX) --
+  wire [31:0] alu_src1;               // First ALU operand
+  wire [31:0] alu_src2;               // Second ALU operand
+  wire [31:0] shifter_src1;           // First Shifter operand (data)
+  wire [31:0] shifter_src2;           // Second Shifter operand (shift amount)
+  wire [ 2:0] alu_op_final;           // Final ALU operation control to ALU
+  wire        alu_zero;               // ALU Zero flag
+  reg  [31:0] alu_result;             // ALU computation result
+  reg  [31:0] shift_result;           // Shifter result
+
+  //-- Signals from Memory Path (Generated in MEM) --
+  wire [31:0] load_data;              // Data processed from memory/registers for load operations
+
+  //-- Signals for WB Stage --
+  wire        RF_wen;                 // Final write enable to RegFile
+  wire [ 4:0] RF_waddr;               // Write address to RegFile
+  reg  [31:0] RF_wdata;               // Write data to RegFile
+
+  // -- Signals for interrupt handling --
+  reg intr_mask; // Interrupt mask (1: interrupts enabled, 0: disabled)
+  wire is_eret; // Indicates ERET instruction
+
+/* The following signal is leveraged for behavioral simulation,
 * which is delivered to testbench.
 *
 * STUDENTS MUST CONTROL LOGICAL BEHAVIORS of THIS SIGNAL.
 *
 * inst_retired (70-bit): detailed information of the retired instruction,
-* mainly including (in order) 
-* { 
+* mainly including (in order)
+* {
 *   reg_file write-back enable  (69:69,  1-bit),
-*   reg_file write-back address (68:64,  5-bit), 
-*   reg_file write-back data    (63:32, 32-bit),  
+*   reg_file write-back address (68:64,  5-bit),
+*   reg_file write-back data    (63:32, 32-bit),
 *   retired PC                  (31: 0, 32-bit)
 * }
 *
 */
+  // assign inst_retire = {RF_wen, RF_waddr, RF_wdata, current_pc}; // Assigning the inst_retire signal with the required information
 
+  //============================================================================
+  // PIPELINE STAGE 0: FSM Implementation
+  //============================================================================
 
-// TODO: Please add your custom CPU code here
-        wire			RF_wen;
-        wire [4:0]		RF_waddr;
-	wire [31:0]		RF_wdata;
+// -- FSM State Definitions --
+localparam INIT = 10'b0000000001, // Initial State
+           IF   = 10'b0000000010, // Instruction Fetch
+           IW   = 10'b0000000100, // Instruction Wait
+           ID   = 10'b0000001000, // Instruction Decode
+           EX   = 10'b0000010000, // Execute
+           ST   = 10'b0000100000, // Store - Memory Write
+           LD   = 10'b0001000000, // Load - Memory Read
+           RDW  = 10'b0010000000, // Read Data Wait
+           WB   = 10'b0100000000, // Write Back
+           INTR = 10'b1000000000; // Interrupt handling
 
-        // split the instruction IR in to diffrent parts
-        wire [ 5:0] op, func;
-        wire [ 4:0] rs, rt, rd, sa;
-        wire [15:0] imm = {rd, sa, func};
-        wire [25:0] instr_index = {rs, rt, rd, sa, func};
-        wire R_type, J_type, REGIMM;
-        wire ERET = (IR == 32'b01000010000000000000000000011000);
-        assign {op, rs, rt, rd, sa, func} = IR;
+  // -- FSM State Register --
+  always @(posedge clk) begin
+    if (rst) begin
+      current_state <= INIT;         // Reset state
+    end else begin
+      current_state <= next_state; // Update state based on FSM logic
+    end
+  end
 
-        // PC module *****************************************************************
-
-        // the PC result of branch instruction
-        wire branchValid = (REGIMM             & (Zero ^ ~rt[0])
-                         | (~op[1] && ~REGIMM) & (Zero ^ op[0])
-                         | op[1]               & (Zero & (|RF_rdata1) ^ ~op[0])) & PCWriteCond ;
-
-        // the PC result of J-type instruction or jr and jalr
-        wire [31:0] PC_jmp = {32{ J_type}} & {PC[31:28], instr_index, 2'b00}
-                           | {32{~J_type}} & RF_rdata1;
-        // select the next PC
-        reg  [31:0] PC_reg;
-        wire [31:0] PC_next;
-
-        assign PC = PC_reg;
-        assign PC_next = {32{~ERET && PCsource == 2'b01}} & ALUOut
-                       | {32{~ERET && PCsource == 2'b00}} & ALU_result
-                       | {32{~ERET && PCsource == 2'b10}} & PC_jmp
-                       | {32{ ERET                     }} & EPC;
-        
-	always @(posedge clk) begin
-		if (rst) begin
-			PC_reg <= 32'b0;
-		end
-                else if (current_state[9]) begin
-                        PC_reg <= 32'h100;
-                end
-                else if (PCWrite || branchValid) begin
-                        PC_reg <= PC_next;
-                end
-                else begin
-                        PC_reg <= PC_reg;
-                end
-	end
-
-        // EPC 
-        reg [31:0] EPC;
-        always @(posedge clk) begin
-                if (current_state[9])
-                        EPC <= PC;
-                else
-                        EPC <= EPC;
+  // -- FSM Next State Logic --
+  always @(*) begin
+    case (current_state)
+      INIT : begin
+        if (rst) begin
+          next_state = INIT; // Reset state
         end
-
-        // IR
-        reg [31:0] IR;
-        always @(posedge clk) begin
-                if (IRWrite) begin
-                        IR <= Instruction;
-                end
-                else begin
-                        IR <= IR;
-                end
+        else begin
+          next_state = IF;
         end
-
-        // MDR
-        reg [31:0] MDR;
-        always @(posedge clk) begin
-                // Change the MDR only when the handshake is successful
-                if (current_state[7] && Read_data_Ready && Read_data_Valid)
-                        MDR <= MemRdata;
-                else
-                        MDR <= MDR;
+      end
+      IF : begin
+        if (intr && !intr_mask) begin
+          next_state = INTR;
         end
+        else if (Inst_Req_Ready) begin
+          next_state = IW;
+        end
+        else begin
+          next_state = IF;
+        end
+      end
+      INTR : next_state = IF; // Interrupt handling state, fetch ISR instructions
+      IW : begin
+        if (Inst_Valid) begin
+          next_state = ID;
+        end
+        else begin
+          next_state = IW;
+        end
+      end
+      ID : begin
+            if (NOP) begin
+              next_state = IF;
+            end
+            else begin
+              next_state = EX;
+            end
+      end
+      EX : begin
+        if (is_j_instr || is_REGIMM || is_branch) begin
+          next_state = IF;
+        end
+        else if (is_load_store) begin
+          if (is_load) begin
+            next_state = LD;
+          end
+          else if (is_store) begin
+            next_state = ST;
+          end
+          else begin
+            next_state = IF;
+          end
+        end
+        else begin
+          next_state = WB;
+        end
+      end
+      LD : begin
+        if (Mem_Req_Ready) begin
+          next_state = RDW;
+        end
+        else begin
+          next_state = LD;
+        end
+      end
+      RDW : begin
+        if (Read_data_Valid) begin
+          next_state = WB;
+        end
+        else begin
+          next_state = RDW;
+        end
+      end
+      ST : begin
+        if (Mem_Req_Ready) begin
+          next_state = IF;
+        end
+        else begin
+          next_state = ST;
+        end
+      end
+      WB : next_state = IF;
+      default: next_state = IF;
+  endcase
+  end
 
-        // Alu module ***********************************************************************************
-        ALU_controler my_ALU_controler(
-                .func(func),
-                .ALUop(ALUop),
-                .ALUcontrol(ALUcontrol)
+  // -- FSM Output Logic --
+  assign IRWrite = (current_state == IW) && Inst_Valid;
+  assign Regwrite_fsm = (current_state == WB); // Register write enable signal
+  assign Inst_Req_Valid = (current_state == IF) && !(intr && !intr_mask); // Request instruction fetch
+  assign Inst_Ready = (current_state == INIT) || (current_state == IW);
+  assign Read_data_Ready = (current_state == INIT) || (current_state == RDW);
+
+  // -- Instruction Register Logic --
+  always @(posedge clk) begin
+    if (IRWrite) begin
+      IR <= Instruction; // Reset instruction register
+    end else begin
+      IR <= IR;          // Fetch instruction from memory
+    end
+  end
+
+  // -- EPC Register Logic --
+  reg [31:0] EPC;        // Exception Program Counter (EPC) register
+  always @(posedge clk) begin
+    if (rst) begin
+      EPC <= 32'b0;      // Reset EPC to 0
+    end else if (current_state == INTR) begin
+      EPC <= current_pc; // Store current PC in EPC on interrupt
+    end else begin
+      EPC <= EPC;        // Keep EPC unchanged otherwise
+    end
+  end
+
+  // -- interrupt mask logic --
+  always @(posedge clk) begin
+    if (rst || (current_state == ID && is_eret)) begin
+      intr_mask <= 1'b0; // Reset mask to enable interrupts
+    end else if (current_state == INTR) begin
+      intr_mask <= 1'b1; // Disable interrupts during interrupt handling
+    end else begin
+      intr_mask <= intr_mask; // Re-enable interrupts after handling
+    end
+  end
+
+
+  //============================================================================
+  // PIPELINE STAGE 1: Instruction Fetch (IF)
+  //============================================================================
+
+  //-- PC Register --
+  wire pc_write_enable = (current_state == IW && next_state == ID) ||                                          // Always update after IF (for PC+4 usually)
+                       ((current_state == EX) && is_jump) ||                               // Update for any jump in EX
+                       ((current_state == EX) && is_branch && branch_condition_satisfied) ||
+                       ((current_state == ID) && is_eret); // Update for taken branch in EX
+  pc instance_pc (
+      .clk        (clk),
+      .rst        (rst),
+      .current_state   (current_state), // Input: Current FSM state (to control PC updates)
+      .pc_write_enable (pc_write_enable), // Input: PC write enable signal (from control logic)
+      .next_pc    (next_pc),              // Input: Next PC value (Calculated in EX stage)
+      .pc         (current_pc)            // Output: Current PC value (Used across stages)
+  );
+
+
+  //============================================================================
+  // PIPELINE STAGE 2: Instruction Decode / Register Fetch (ID)
+  //============================================================================
+
+  //-- Instruction Field Decoding --
+  assign      opcode   = IR[31:26]; // Opcode field
+  assign      rs       = IR[25:21]; // Source register 1 specifier
+  assign      rt       = IR[20:16]; // Source register 2 specifier / Branch Func
+  assign      rd       = IR[15:11]; // Destination register specifier (R-type)
+  assign      shamt    = IR[10: 6]; // Shift amount (R-type shift)
+  assign      funct    = IR[ 5: 0]; // Function field (R-type)
+  assign      imm_16   = IR[15: 0]; // 16-bit immediate value
+  assign      imm_J    = IR[25: 0]; // 26-bit immediate for jump
+
+  //-- Immediate Value Processing (Purely from Instruction) --
+  assign      NOP      = (~|IR);                                      // NOP instruction (all bits 0)
+  assign      imm_SE   = {{16{imm_16[15]}}, imm_16};                  // Sign-extended immediate
+  assign      imm_0E   = {16'b0, imm_16};                             // Zero-extended immediate
+  assign      imm_B_ext= {{16{imm_16[15]}}, imm_16};                  // Sign-extended branch immediate (used in EX)
+  assign      lui_result = {imm_16, 16'b0};                           // Result for LUI instruction (used in WB)
+  assign      use_zero_extend = (opcode[5:3] == 3'b001) && opcode[2]; // Use Zero Ext for ANDI/ORI/XORI (used in EX)
+
+  //-- Primary Control Signal Generation (Purely from Instruction) --
+  wire        is_branch_sub     = (opcode[5:2] == 4'b0001);                    // Specific branch types
+  wire        is_branch_slt     = (opcode == 6'b000001);                       // Branches that use slt as alu_op
+  assign      is_eret           = (IR == 32'h42000018);                        // ERET instruction (used in ID)
+  assign      is_branch         = (is_branch_sub || is_branch_slt);            // General branch flag
+  assign      reg_dst_input     = opcode[5] ^ opcode[3];                       // Hint for WB Stage dest reg sel
+  assign      mem_read_internal = (current_state == LD) && (opcode[5:3] == 3'b100); // Control for MEM Stage
+  assign      mem_write_internal= (current_state == ST) && (opcode[5:3] == 3'b101); // Control for MEM Stage
+  assign      alu_src_imm_input = ((opcode[5] || opcode[3]) && !opcode[4]);    // Control for EX Stage (ALU Src Sel)
+
+  //-- Secondary Control Signal Generation (Purely from Instruction or derived ID signals) --
+  wire        imm_arithmetic    = (opcode[5:3] == 3'b001 && ~&opcode[2:0]);       // I-type Arith?
+  assign      is_load           = opcode[5:3] == 3'b100;                          // Load?
+  assign      is_store          = opcode[5:3] == 3'b101;                          // Store?
+  assign      is_load_store     = opcode[5:3] == 3'b100 || opcode[5:3] == 3'b101; // Load or Store?
+  assign      reg_write_cond    = !mem_write_internal && !is_branch;              // Base RegWrite condition (used in WB)
+
+  // -- Decode I-type arith op based on opcode --
+  wire [ 2:0] arith_type;
+  assign      arith_type[0]     = (~opcode[2] & opcode[1]) | (opcode[2] & opcode[0]);
+  assign      arith_type[1]     = ~opcode[2];
+  assign      arith_type[2]     = opcode[1] & ~opcode[0];
+  assign      alu_op_cond       = is_branch_slt  ? 3'b111 :
+                                  is_branch_sub  ? 3'b110 :
+                                  is_load_store  ? 3'b010 :
+                                  imm_arithmetic ? arith_type :
+                                  3'bxxx;
+  assign      alu_op_ok         = (imm_arithmetic || is_branch || is_load_store);      // Validity of hint for EX
+
+  assign      is_alu_operation   = ((~|opcode && funct[5] == 1'b1) || imm_arithmetic); // Is it an ALU op? (Used EX/WB)
+  assign      is_shift_operation = (~|opcode && ~|funct[5:3]);                         // Is it a Shift op? (Used EX/WB)
+
+  // -- Decode R-type arith op based on funct --
+  wire [ 2:0] r_type_arith_op;
+  assign      r_type_arith_op[0] = (funct[3] & funct[1]) | (~funct[3] & funct[2] & funct[0]);
+  assign      r_type_arith_op[1] = funct[3] | ~funct[2];
+  assign      r_type_arith_op[2] = (funct[3] & ~funct[0]) | (~funct[3] & funct[1]);
+  assign      alu_op             = (~|opcode) ? r_type_arith_op : alu_op_cond ;        // Base ALU op (R/I type) (Used EX)
+
+  // -- Decode R-type shift op based on funct --
+  wire [ 1:0] shift_type;                                                              // Decode R-type shift op based on funct
+  assign      shift_type[0]      = funct[1] & funct[0];
+  assign      shift_type[1]      = funct[1];
+  assign      shifter_op         = is_shift_operation ? shift_type : 2'b00;            // Shift op type (Used EX)
+  assign      is_shamt           = is_shift_operation && ~funct[2];                    // Use shamt? (Used EX)
+
+  assign      is_zero_cmp        = is_branch && (opcode[2:0] == 3'b110 || opcode[2:0] == 3'b111 || opcode[2:0] == 3'b001); // Compare rs to 0? (Used EX)
+
+  assign      is_move            = (~|opcode && funct[1] && funct[3] && !funct[5]);    // MOVZ/MOVN? (Used EX/WB)
+  assign      is_lui             = (opcode == 6'b001111);                              // LUI? (Used WB)
+  assign      move_alu_op        = 3'b001;                                             // ALU Op for Move (Used EX)
+
+  assign      is_j_instr         = (opcode == 6'b000010);
+  assign      is_jal_instr       = (opcode == 6'b000011);
+  assign      is_jr_instr        = (~|opcode && funct == 6'b001000);
+  assign      is_jalr_instr      = (~|opcode && funct == 6'b001001);
+  assign      is_jump            = is_j_instr || is_jal_instr || is_jr_instr || is_jalr_instr; // Is it any Jump? (Used EX)
+  assign      is_link_jump       = is_jal_instr || is_jalr_instr;                              // Is it JAL/JALR? (Used EX/WB)
+  assign      is_REGIMM          = (opcode == 6'b000001);                                      // Is it REGIMM? (Used EX)
+
+  assign      write_disallowed   = is_j_instr || is_jr_instr || mem_write_internal;            // Instr. that don't write back (refined) (Used WB)
+  assign      intermediate_reg_write_cond = reg_write_cond && !write_disallowed;               // Base write condition refined (Used WB)
+
+
+
+
+  //-- Register File Read --
+  reg_file instance_reg_file (
+      .clk        (clk),
+      .waddr      (RF_waddr),         // Input: Write address (From WB stage)
+      .raddr1     (rs),               // Input: Read address 1 (rs field from ID)
+      .raddr2     (rt),               // Input: Read address 2 (rt field from ID)
+      .wen        (RF_wen),           // Input: Write enable (From WB stage)
+      .wdata      (RF_wdata),         // Input: Write data (From WB stage)
+      .rdata1     (RF_rdata1),        // Output: Read data 1 (rs value) -> To EX
+      .rdata2     (RF_rdata2)         // Output: Read data 2 (rt value) -> To EX/MEM/WB
+  );
+
+  //============================================================================
+  // PIPELINE STAGE 3: Execute (EX)
+  //============================================================================
+
+  //-- ALU Source Selector Logic (Uses ID signals, Reg Data) --
+  assign      alu_src1           = (is_move) ? 32'b0 : RF_rdata1;                         // ALU Input A
+  assign      alu_src2           = (is_zero_cmp)       ? 32'b0 :                          // ALU Input B
+                                   (alu_src_imm_input) ? (use_zero_extend ? imm_0E : imm_SE) :
+                                   RF_rdata2;
+
+  //-- Shifter Source Selector Logic (Uses ID signals, Reg Data) --
+  assign      shifter_src1       = RF_rdata2;                                             // Shifter Input A (Data)
+  assign      shifter_src2       = (is_shamt) ? {27'b0, shamt} : {27'b0, RF_rdata1[4:0]}; // Shifter Input B (Amount)
+
+  //-- ALU Op Generator Logic (Uses ID signals) --
+  assign      alu_op_final       = (is_move)          ? move_alu_op :
+                                   (is_alu_operation) ? alu_op :
+                                   (alu_op_ok)        ? alu_op_cond :
+                                   3'b010;                                                // Final ALU Op -> To ALU
+
+  //-- ALU Execution --
+  wire [31:0] alu_out;                // ALU computation result
+
+  alu instance_alu (
+      .A          (alu_src1),         // Input A from Src Sel
+      .B          (alu_src2),         // Input B from Src Sel
+      .ALUop      (alu_op_final),     // Input Opcode from Op Gen
+      .Overflow   (),
+      .CarryOut   (),
+      .Zero       (alu_zero),         // Output: Zero flag -> To EX (PC Ctrl), WB
+      .Result     (alu_out)           // Output: ALU computation result -> To EX (PC Ctrl), MEM, WB
+  );
+
+  always @(posedge clk) begin
+      alu_result <= alu_out;          // Store ALU result for MEM stage
+  end
+
+  //-- Shifter Execution --
+  wire [31:0] shifter_out;                // Shifter computation result
+
+  shifter instance_shifter (
+      .A          (shifter_src1),         // Input Data from Src Sel
+      .B          (shifter_src2[4:0]),    // Input Shift Amount from Src Sel
+      .Shiftop    (shifter_op),           // Input Opcode from ID
+      .Result     (shifter_out)           // Output: Shifter result -> To WB
+  );
+
+  always @(posedge clk) begin
+      shift_result <= shifter_out;        // Store Shifter result for WB stage
+  end
+
+  //-- PC Controller Logic (Uses ID signals, EX results, IF PC) --
+  assign      branch_condition_satisfied = is_branch &&                                                                    // Check using signals from ID and results from EX
+                                           ( (is_branch_slt && (rt[0] ^ alu_result[0])) ||                                 // REGIMM check using rt(funct_branch) from ID, alu_result from EX
+                                             (is_branch_sub && opcode[1] && (opcode[0] ^ (alu_result[31] || alu_zero))) || // BLEZ/BGTZ check using opcode from ID, alu_result/zero from EX
+                                             (is_branch_sub && !opcode[1] && (opcode[0] ^ alu_zero))                       // BEQ/BNE check using opcode from ID, alu_zero from EX
+                                           );
+
+  wire [31:0] branch_target      = (current_pc) + (imm_B_ext << 2);                                                   // Branch target addr calculation
+
+  wire [31:0] jump_target        = (is_j_instr || is_jal_instr) ? {current_pc[31:28], imm_J, 2'b00} : RF_rdata1;      // J/JAL or JR/JALR target calculation
+
+  // Next PC Selection based on control signals (ID) and conditions (EX)
+  assign      next_pc            = (rst)                                                    ? 32'h00000000 :          // Reset PC value
+                                   (!is_eret && current_state == EX && is_jump)                         ? jump_target  :          // Jump target selection
+                                   (!is_eret && current_state == EX && is_branch && branch_condition_satisfied) ? branch_target : // Branch target selection
+                                   (is_eret) ? EPC :                                                     // ERET instruction -> Use EPC
+                                   current_pc + 4;                                                                    // Default: PC + 4 -> To IF
+
+  // PC+8 Calculation for Link Instructions (Uses ID signal, IF PC)
+  assign      pc_store           = is_link_jump ? (current_pc + 4) : 32'b0;                                           // Value to store for JAL/JALR -> To WB
+
+  //============================================================================
+  // PIPELINE STAGE 4: Memory Access (MEM)
+  //============================================================================
+
+  //-- Load/Store Address and Data Logic (Uses ID signals, EX results, ID reg data) --
+  wire [ 1:0] addr_offset        = alu_result[1:0];            // Byte offset (from EX result)
+  wire        addr_0             = (addr_offset == 2'b00);
+  wire        addr_1             = (addr_offset == 2'b01);
+  wire        addr_2             = (addr_offset == 2'b10);
+  wire        addr_3             = (addr_offset == 2'b11);
+
+  // Memory Address Output Calculation (Uses EX result)
+  assign      Address            = {alu_result[31:2], 2'b00};  // Word-aligned address -> To Memory Interface
+
+  // Memory Write Strobe Generation (Uses ID signals, EX result offset)
+  assign      Write_strb         = {4{mem_write_internal}} & ( // Use is_store (mem_write_internal) from ID
+                                     (({4{opcode[1:0] == 2'b00}} & ((addr_0 ? 4'b0001 : 0) | (addr_1 ? 4'b0010 : 0) | (addr_2 ? 4'b0100 : 0) | (addr_3 ? 4'b1000 : 0))) | // SB
+                                     ({4{opcode[1:0] == 2'b01}} & ((addr_0 ? 4'b0011 : 0) | (addr_2 ? 4'b1100 : 0))) |                                                    // SH
+                                     ({4{opcode[1:0] == 2'b11}} & (addr_0 ? 4'b1111 : 4'b0000)) |                                                                         // SW
+                                     ({4{opcode[2:0] == 3'b010}} & ((addr_0 ? 4'b0001 : 0) | (addr_1 ? 4'b0011 : 0) | (addr_2 ? 4'b0111 : 0) | (addr_3 ? 4'b1111 : 0))) | // SWL
+                                     ({4{opcode[2:0] == 3'b110}} & ((addr_0 ? 4'b1111 : 0) | (addr_1 ? 4'b1110 : 0) | (addr_2 ? 4'b1100 : 0) | (addr_3 ? 4'b1000 : 0)))   // SWR
+                                    )); // -> To Memory Interface
+
+  assign      Write_data         = {32{mem_write_internal}} & ( // Format RF_rdata2 for stores -> To Memory Interface
+                                     (({32{opcode[1:0] == 2'b00}} & {4{RF_rdata2[7:0]}}) | // SB
+                                     ({32{opcode[1:0] == 2'b01}} & {2{RF_rdata2[15:0]}}) | // SH
+                                     ({32{opcode[1:0] == 2'b11}} & RF_rdata2) |            // SW
+                                     ({32{opcode[2:0] == 3'b010}} & ( // SWL (Logic kept as-is)
+                                         (addr_0 ? {24'b0, RF_rdata2[31:24]} :
+                                          addr_1 ? {16'b0, RF_rdata2[31:16]} :
+                                          addr_2 ? { 8'b0, RF_rdata2[31: 8]} :
+                                                   RF_rdata2)
+                                     )) |
+                                     ({32{opcode[2:0] == 3'b110}} & ( // SWR (Logic kept as-is)
+                                         (addr_0 ? RF_rdata2 :
+                                          addr_1 ? {RF_rdata2[23:0],  8'b0} :
+                                          addr_2 ? {RF_rdata2[15:0], 16'b0} :
+                                                   {RF_rdata2[ 7:0], 24'b0})
+                                     )))
+                                   );
+
+   // Processing of Data Read from Memory (Uses ID signals, EX result offset, ID reg data, Mem input)
+   assign      load_data          = (current_state == RDW && next_state == WB) ? // Process Read_data -> To WB Stage
+                                    ( (opcode[1:0] == 2'b00) ?  // LB/LBU
+                                      (addr_0 ? {{24{(~opcode[2] & Read_data [ 7])}}, Read_data [ 7: 0]} :
+                                       addr_1 ? {{24{(~opcode[2] & Read_data [15])}}, Read_data [15: 8]} :
+                                       addr_2 ? {{24{(~opcode[2] & Read_data [23])}}, Read_data [23:16]} :
+                                                {{24{(~opcode[2] & Read_data [31])}}, Read_data [31:24]} )
+
+                                    : (opcode[1:0] == 2'b01) ?  // LH/LHU
+                                      (addr_0 ? {{16{(~opcode[2] & Read_data [15])}}, Read_data [15: 0]} :
+                                       addr_2 ? {{16{(~opcode[2] & Read_data [31])}}, Read_data [31:16]} :
+                                                32'b0 )
+
+                                    : (opcode[1:0] == 2'b11) ? Read_data // LW
+
+                                    : (opcode[2:0] == 3'b010) ? // LWL
+                                      (addr_0 ? {Read_data [ 7: 0], RF_rdata2 [23: 0]} :
+                                       addr_1 ? {Read_data [15: 0], RF_rdata2 [15: 0]} :
+                                       addr_2 ? {Read_data [23: 0], RF_rdata2 [ 7: 0]} :
+                                                Read_data )
+
+                                    : (opcode[2:0] == 3'b110) ? // LWR
+                                      (addr_0 ? Read_data :
+                                       addr_1 ? {RF_rdata2 [31:24], Read_data [31: 8]} :
+                                       addr_2 ? {RF_rdata2 [31:16], Read_data [31:16]} :
+                                                {RF_rdata2 [31: 8], Read_data [31:24]} )
+
+                                    : 32'b0 ) // Default unknown load
+                                    : 32'b0;  // Default if not a load
+
+
+  //============================================================================
+  // PIPELINE STAGE 5: Write Back (WB)
+  //============================================================================
+
+  //-- Register Write Address and Enable Logic (Uses ID signals, EX results) --
+  assign      RF_waddr           = (is_link_jump) ? 5'd31 :           // JAL/JALR -> $ra (from ID)
+                                   (reg_dst_input) ? rt :             // I-type/Load hint -> rt (from ID)
+                                   rd;                                // R-type hint -> rd (from ID)
+                                                                      // -> To RegFile instance
+
+  assign      RF_wen             = Regwrite_fsm & ((intermediate_reg_write_cond && !is_move) || // Use conditions from ID and...
+                                   (is_move && (funct[0] ^ alu_zero) && reg_write_cond));       // ...MOVZ/N check using alu_zero from EX
+                                                                                                // -> To RegFile instance
+
+  //-- Write Back Data Selection (Uses ID signals, EX results, MEM results) --
+  wire [31:0] _RF_wdata;                                                       // Write data to RegFile (processed from ID, EX, MEM)
+  assign      _RF_wdata          = (is_lui)             ? lui_result :         // P1: LUI (from ID)
+                                   (current_state == RDW && next_state == WB)  ? load_data :          // P2: Load result from MEM
+                                   (is_move)            ? RF_rdata1 :          // P3: MOVZ/MOVN result (rs) from ID
+                                   (is_alu_operation)   ? alu_result :         // P4: Other ALU result from EX
+                                   (is_shift_operation) ? shift_result :       // P5: Shifter result from EX
+                                   (is_link_jump)       ? pc_store :           // P6: Link address (PC+8) from EX
+                                   32'b0;                                      // Default: 0 (No writeback)
+                                                                               // -> To RegFile instance
+  always @(posedge clk) begin
+      RF_wdata <= _RF_wdata;                                                   // Store write data for RegFile
+  end
+
+  //----------------------------------------------------------------------------
+  // Top-Level Output Assignments
+  //----------------------------------------------------------------------------
+  assign      PC                 = current_pc;                      // Output current PC (from IF stage)
+  assign      MemWrite           = mem_write_internal;              // Output MemWrite signal (from ID stage control)
+  assign      MemRead            = mem_read_internal;               // Output MemRead signal (from ID stage control)
+
+  //============================================================================
+  // Performance Counters
+  //============================================================================
+
+  reg [31:0] perf_cycle_count;             // cnt_0
+  reg [31:0] perf_retired_inst_count;      // cnt_1
+  reg [31:0] perf_retired_load_count;      // cnt_2
+  reg [31:0] perf_retired_store_count;     // cnt_3
+  reg [31:0] perf_branch_executed_count;   // cnt_4
+  reg [31:0] perf_branch_taken_count;      // cnt_5
+  reg [31:0] perf_if_stall_count;          // cnt_6
+  reg [31:0] perf_mem_access_stall_count;  // cnt_7 (LD/ST stalls on Mem_Req_Ready)
+  reg [31:0] perf_iw_stall_count;          // cnt_8
+  reg [31:0] perf_rdw_stall_count;         // cnt_9
+  reg [31:0] perf_jump_executed_count;     // cnt_10
+  reg [31:0] perf_alu_op_executed_count;   // cnt_11
+  reg [31:0] perf_shift_op_executed_count; // cnt_12
+  reg [31:0] perf_nop_in_id_count;         // cnt_13
+  reg [31:0] perf_total_mem_ops_count;     // cnt_14
+  reg [31:0] perf_reg_writes_count;        // cnt_15
+
+
+  // Logic for incrementing counters
+  wire increment_retired_inst;
+  wire increment_retired_load;
+  wire increment_retired_store;
+  wire increment_branch_executed;
+  wire increment_branch_taken;
+  wire increment_if_stall;
+  wire increment_mem_access_stall;
+  wire increment_iw_stall;
+  wire increment_rdw_stall;
+  wire increment_jump_executed;
+  wire increment_alu_op_executed;
+  wire increment_shift_op_executed;
+  wire increment_nop_in_id;
+  wire increment_total_mem_ops;
+  wire increment_reg_writes;
+
+
+  // Determine when an instruction is considered retired (Same as before)
+  assign increment_retired_inst =
+        (current_state == WB && Regwrite_fsm && !NOP && (is_alu_operation || is_shift_operation || is_lui || is_link_jump)) ||
+        (current_state == WB && Regwrite_fsm && !NOP && is_load) ||
+        (current_state == ST && Mem_Req_Ready && !NOP && is_store) ||
+        (current_state == EX && !NOP &&
+            (is_j_instr || is_jr_instr || is_REGIMM || (is_branch && !is_link_jump)) &&
+            (next_state == IF)
         );
-        wire CarryOut, Overflow, Zero;
-        wire [31:0] extenImm = (op[2]) ? {16'b0, imm} : {{16{imm[15]}}, imm};
-        wire [31:0] ALU_A, ALU_B, ALU_result;
 
-        assign ALU_A = {32{ ALUSrcA}} & RF_rdata1
-                     | {32{~ALUSrcA}} & PC;
+  assign increment_retired_load = (current_state == WB && Regwrite_fsm && !NOP && is_load);
+  assign increment_retired_store = (current_state == ST && Mem_Req_Ready && !NOP && is_store);
+  assign increment_branch_executed = (current_state == EX && !NOP && is_branch);
+  assign increment_branch_taken = (current_state == EX && !NOP && is_branch && branch_condition_satisfied);
+  assign increment_if_stall = (current_state == IF && !Inst_Req_Ready && !rst);
+  assign increment_mem_access_stall = ((current_state == LD || current_state == ST) && !Mem_Req_Ready && !rst);
+  assign increment_iw_stall = (current_state == IW && !Inst_Valid && !rst);
+  assign increment_rdw_stall = (current_state == RDW && !Read_data_Valid && !rst);
+  assign increment_jump_executed = (current_state == EX && !NOP && is_jump);
+  // For ALU/Shift, ensure it's not a mem op address calc or branch compare
+  assign increment_alu_op_executed = (current_state == EX && !NOP && is_alu_operation && !is_load_store && !is_branch && !is_jump);
+  assign increment_shift_op_executed = (current_state == EX && !NOP && is_shift_operation && !is_load_store && !is_branch && !is_jump);
+  assign increment_nop_in_id = (current_state == ID && NOP && !rst); // NOP is decoded in ID
+  assign increment_total_mem_ops = (current_state == EX && !NOP && is_load_store); // Count when it enters EX, destined for MEM
+  assign increment_reg_writes = (current_state == WB && RF_wen && !rst);
 
-        assign ALU_B = {32{ALUSrcB == 2'b00}} & RF_rdata2
-                     | {32{ALUSrcB == 2'b01}} & 32'b100
-                     | {32{ALUSrcB == 2'b10}} & extenImm
-                     | {32{ALUSrcB == 2'b11}} & {{14{imm[15]}}, imm, 2'b0};
 
-        alu my_ALU(
-                .ALUop(ALUcontrol),
-                .A(ALU_A),
-                .B(ALU_B),
-                .Result(ALU_result),
-                .Zero(Zero),
-                .CarryOut(CarryOut),
-                .Overflow(Overflow)
-        );
+  // cnt_0: Cycle Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_cycle_count <= 32'd0;
+    end else begin
+      perf_cycle_count <= perf_cycle_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_0 = perf_cycle_count;
 
-        reg [31:0] ALUOut;
-        always @(posedge clk) begin
-                // ALUOut is unchanged while waiting for memory response
-                if (current_state[5] || current_state[6] || current_state[7])
-                        ALUOut <= ALUOut;
-                else
-                        ALUOut <= {32{~ShifterValid}} & ALU_result
-                                | {32{ ShifterValid}} & Shifter_result;
-        end
+  // cnt_1: Retired Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_inst_count <= 32'd0;
+    end else if (increment_retired_inst) begin
+      perf_retired_inst_count <= perf_retired_inst_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_1 = perf_retired_inst_count;
 
-        // shifter module ******************************************************************
-        wire [31:0] Shifter_result, Shfter_A;
-        wire [ 1:0] Shfter_op = func[1:0];
-        wire [ 4:0] Shfter_B = {5{ saValid}} & sa
-                             | {5{~saValid}} & ALU_A[4:0];
-        wire ShifterValid = R_type & ~func[5] & ~func[3] && ~lui;
-        wire saValid = ~func[2];
-        assign Shfter_A = ALU_B;
+  // cnt_2: Retired Load Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_load_count <= 32'd0;
+    end else if (increment_retired_load) begin
+      perf_retired_load_count <= perf_retired_load_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_2 = perf_retired_load_count;
 
-        shifter my_shifter(
-                .A(Shfter_A),
-                .B(Shfter_B),
-                .Result(Shifter_result),
-                .Shiftop(Shfter_op)
-        );
+  // cnt_3: Retired Store Instruction Count
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_retired_store_count <= 32'd0;
+    end else if (increment_retired_store) begin
+      perf_retired_store_count <= perf_retired_store_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_3 = perf_retired_store_count;
 
-        // RegFile module **********************************************************************
-        wire [31:0] Result, RF_rdata1, RF_rdata2;
-        wire [4:0] RF_raddr1 = rs;
-        wire [4:0] RF_raddr2 = {5{ REGIMM}} & 5'b0
-                             | {5{~REGIMM}} & rt;
+  // cnt_4: Total Branch Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_branch_executed_count <= 32'd0;
+    end else if (increment_branch_executed) begin
+      perf_branch_executed_count <= perf_branch_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_4 = perf_branch_executed_count;
 
-        assign RF_waddr = {5{RegDst && ~mov || movValid}} & rd
-                        | {5{ImmDst}}                     & rt
-                        | {5{J_type && op[0]}}            & {5'd31};
+  // cnt_5: Taken Branch Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_branch_taken_count <= 32'd0;
+    end else if (increment_branch_taken) begin
+      perf_branch_taken_count <= perf_branch_taken_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_5 = perf_branch_taken_count;
 
-        assign RF_wdata = {32{ MemtoReg}} & MDR
-                        | {32{~MemtoReg}} & Result;
+  // cnt_6: IF Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_if_stall_count <= 32'd0;
+    end else if (increment_if_stall) begin
+      perf_if_stall_count <= perf_if_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_6 = perf_if_stall_count;
 
-        assign Result = {32{lui}}               & {imm, 16'b0}
-                      | {32{movValid}}          & RF_rdata1
-                      | {32{~lui && ~movValid}} & ALUOut;
+  // cnt_7: Data Memory Access Stalls (LD/ST stalls on Mem_Req_Ready)
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_mem_access_stall_count <= 32'd0;
+    end else if (increment_mem_access_stall) begin
+      perf_mem_access_stall_count <= perf_mem_access_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_7 = perf_mem_access_stall_count;
 
-        wire jr = R_type && (func == 6'b001000);
-        assign RF_wen = RegWrite && ~jr && ~mov || movValid;
-        reg_file my_rf(
-                .clk(clk),
-                .raddr1(RF_raddr1),
-                .raddr2(RF_raddr2),
-                .wen(RF_wen),
-                .waddr(RF_waddr),
-                .wdata(RF_wdata),
-                .rdata1(RF_rdata1),
-                .rdata2(RF_rdata2)
-        );
+  // cnt_8: IW Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_iw_stall_count <= 32'd0;
+    end else if (increment_iw_stall) begin
+      perf_iw_stall_count <= perf_iw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_8 = perf_iw_stall_count;
 
-        // memory load and store module *******************************************
-        // load
-        wire [3:0] offset;
-        assign Address   = {ALUOut[31:2], 2'b0};
-        assign offset[0] = (ALUOut[1:0] == 2'b00);
-        assign offset[1] = (ALUOut[1:0] == 2'b01);
-        assign offset[2] = (ALUOut[1:0] == 2'b10);
-        assign offset[3] = (ALUOut[1:0] == 2'b11);
+  // cnt_9: RDW Stage Stalls
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_rdw_stall_count <= 32'd0;
+    end else if (increment_rdw_stall) begin
+      perf_rdw_stall_count <= perf_rdw_stall_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_9 = perf_rdw_stall_count;
 
-        // generate mask by op[1:0]
-        // the mask set the invaild high bits to 0
-        wire [31:0] mask, validRdata;
-        wire wr = (op[2:1] == 2'b11);
-        wire wl = op[2:0] == 3'b010;
-        wire ailgn = ~(op[1:0] == 2'b10);
-        assign mask[ 7: 0] =  8'hFF;
-        assign mask[15: 8] =  8'hFF   & { 8{op[0]}};
-        assign mask[31:16] = 16'hFFFF & {16{op[1]}};
+  // cnt_10: Jump Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_jump_executed_count <= 32'd0;
+    end else if (increment_jump_executed) begin
+      perf_jump_executed_count <= perf_jump_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_10 = perf_jump_executed_count;
 
-        wire [31:0] MemRdata, extenMemRdata, lwr_data, lwl_data;
-        // the low valid bits of the data of lwr and lw, lh, lb is the same 
-        // we just need to mask the high invalid bits of lwr_data
-        assign validRdata = lwr_data & mask;
-        // get RdataSignal by op[0]
-        wire [31:0] RdataSignal = {32{~op[0]}} & {{24{validRdata[ 7]}},  8'b0}
-                                | {32{ op[0]}} & {{16{validRdata[15]}}, 16'b0};
+  // cnt_11: ALU Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_alu_op_executed_count <= 32'd0;
+    end else if (increment_alu_op_executed) begin
+      perf_alu_op_executed_count <= perf_alu_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_11 = perf_alu_op_executed_count;
 
-        // to do sign-extended or not
-        assign extenMemRdata = {32{op[1] || op[2]}} &  validRdata
-                             | {32{~op[1] && ~op[2]}} & (validRdata | RdataSignal);
+  // cnt_12: Shift Instructions Executed
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_shift_op_executed_count <= 32'd0;
+    end else if (increment_shift_op_executed) begin
+      perf_shift_op_executed_count <= perf_shift_op_executed_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_12 = perf_shift_op_executed_count;
 
-        assign lwl_data = {32{offset[0]}} & {Read_data[ 7: 0],RF_rdata2[23:0]}
-                        | {32{offset[1]}} & {Read_data[15: 0],RF_rdata2[15:0]}
-                        | {32{offset[2]}} & {Read_data[23: 0],RF_rdata2[ 7:0]}
-                        | {32{offset[3]}} & {Read_data[31: 0]};
+  // cnt_13: NOP Instructions Encountered in ID
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_nop_in_id_count <= 32'd0;
+    end else if (increment_nop_in_id) begin
+      perf_nop_in_id_count <= perf_nop_in_id_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_13 = perf_nop_in_id_count;
 
-        assign lwr_data = {32{offset[0]}} & {Read_data}
-                        | {32{offset[1]}} & {RF_rdata2[31:24], Read_data[31: 8]}
-                        | {32{offset[2]}} & {RF_rdata2[31:16], Read_data[31:16]}
-                        | {32{offset[3]}} & {RF_rdata2[31: 8], Read_data[31:24]};
+  // cnt_14: Total Memory Operations (Load + Store issued to EX)
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_total_mem_ops_count <= 32'd0;
+    end else if (increment_total_mem_ops) begin
+      perf_total_mem_ops_count <= perf_total_mem_ops_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_14 = perf_total_mem_ops_count;
 
-        assign MemRdata = {32{wl  }} & lwl_data
-                        | {32{wr  }} & lwr_data
-                        | {32{ailgn}} & extenMemRdata;
-
-        // Store
-        wire [31:0] validWdata, swl_data;
-        wire [3:0] WriteWidth, Write_strb_l, Write_strb_r, Write_strb_ailgn;
-        assign WriteWidth[0] = 1'b1;
-        assign WriteWidth[1] = op[0] || op[1];
-        assign WriteWidth[3:2] = {2{op[1]}} & 2'b11;
-
-        assign Write_strb_ailgn = {4{offset[0]}} & {WriteWidth}
-                                | {4{offset[1]}} & {WriteWidth[2:0], 1'b0}
-                                | {4{offset[2]}} & {WriteWidth[1:0], 2'b0}
-                                | {4{offset[3]}} & {WriteWidth[0]  , 3'b0};
-
-        assign Write_strb_l[0] = 1'b1;
-        assign Write_strb_l[1] = ALUOut[0] || ALUOut[1];
-        assign Write_strb_l[2] = ALUOut[1];
-        assign Write_strb_l[3] = ALUOut[0] && ALUOut[1];
-
-        assign Write_strb_r = {Write_strb_l[0], ~Write_strb_l[3], ~Write_strb_l[2], ~Write_strb_l[1]};
-
-        assign Write_strb = {4{wl   }} & Write_strb_l
-                          | {4{wr   }} & Write_strb_r
-                          | {4{ailgn}} & Write_strb_ailgn;
-
-        assign validWdata = {32{offset[0]}} & {RF_rdata2}
-                          | {32{offset[1]}} & {RF_rdata2[23: 0],  8'b0}
-                          | {32{offset[2]}} & {RF_rdata2[15: 0], 16'b0}
-                          | {32{offset[3]}} & {RF_rdata2[ 7: 0], 24'b0};
-
-        // swr_data is the same as validWdata
-        assign swl_data = {32{offset[0]}} & {24'b0, RF_rdata2[31:24]}
-                        | {32{offset[1]}} & {16'b0, RF_rdata2[31:16]}
-                        | {32{offset[2]}} & { 8'b0, RF_rdata2[31: 8]}
-                        | {32{offset[3]}} & RF_rdata2;
-
-        assign Write_data = {32{ wl}} & swl_data
-                          | {32{~wl}} & validWdata;
-
-        // CU module *****************************************************************
-        // generate this control signals and some signals about the type of instruction
-        wire RegDst, ALUSrcA, RegWrite, MemtoReg, IRWrite, PCWrite, PCWriteCond, lui, ImmDst;
-        wire [2:0] ALUcontrol, ALUop;
-        wire [1:0] ALUSrcB, PCsource;
-        wire NOP = ~(|IR);
-
-        // mov
-        wire mov = R_type && (func[5:1] == 5'b00101);
-        wire movValid = ((|RF_rdata2) ^ ~func[0]) && mov;
-        // link
-        wire link = J_type && op[0] || R_type && (func == 6'b001001);
-        // jmp
-        wire jmp = J_type || R_type && jmp_r;
-        wire jmp_r = (func[5:1] == 5'b00100);
-        // load and store
-        wire I_type_branch = (op[5:2] == 4'b0001);
-        wire branch = REGIMM || I_type_branch;
-        wire load  = op[5] && ~op[3];
-        wire store = op[5] &&  op[3];
-
-        // FSM *****************************************************************
-        reg [9:0] current_state;
-        reg [9:0] next_state;
-        localparam INIT = 10'b0000000001,
-                   IF   = 10'b0000000010,
-                   IW   = 10'b0000000100,
-                   ID   = 10'b0000001000,
-                   EX   = 10'b0000010000,
-                   ST   = 10'b0000100000,
-                   LD   = 10'b0001000000,
-                   RDW  = 10'b0010000000,
-                   WB   = 10'b0100000000,
-                   INTR = 10'b1000000000;
-
-        reg no_intr;
-        always @(posedge clk) begin
-                if (rst || current_state[3] && ERET)
-                        no_intr <= 1'b0;
-                else if (current_state[9])
-                        no_intr <= 1'b1;
-                else
-                        no_intr <= no_intr;
-        end
-
-        // FSM 1.
-        always @(posedge clk) begin
-                if (~rst)
-                        current_state <= next_state;
-                else
-                        current_state <= INIT;
-        end
-
-        // FSM 2.
-        always @(*) begin
-                case(current_state)
-                        INIT  : next_state = IF;
-                        IF    : begin
-                                if (intr && !no_intr)
-                                        next_state = INTR;
-                                else if (Inst_Req_Ready)
-                                        next_state = IW;
-                                else
-                                        next_state = IF;
-                        end
-                        IW    : begin
-                                if (Inst_Valid)
-                                        next_state = ID;
-                                else
-                                        next_state = IW;
-                        end
-                        ID    : begin
-                                if (NOP) 
-                                        next_state = IF;
-                                else
-                                        next_state = EX;
-                        end
-                        EX    : begin
-                                if (J_type && ~link || REGIMM || I_type_branch || ERET)
-                                        next_state = IF;
-                                else if (store)
-                                        next_state = ST;
-                                else if (load)
-                                        next_state = LD;
-                                else
-                                        next_state = WB;
-                        end
-                        ST    : begin
-                                if (Mem_Req_Ready)
-                                        next_state = IF;
-                                else 
-                                        next_state = ST;
-                        end
-                        LD    : begin
-                                if (Mem_Req_Ready)
-                                        next_state = RDW;
-                                else
-                                        next_state = LD;
-                        end
-                        RDW   : begin
-                                if (Read_data_Valid)
-                                        next_state = WB;
-                                else
-                                        next_state = RDW;
-                        end
-                        WB    : next_state = IF;
-                        INTR  : next_state = IF;
-                        default: next_state = INIT;
-                endcase
-        end
-
-        // FSM 3.
-        assign Inst_Req_Valid  =  current_state[1] && !(intr && !no_intr) && ~rst;
-        assign Inst_Ready      =  current_state[0] || current_state[2] || rst;
-        assign Read_data_Ready =  current_state[0] || current_state[7] || rst;
-
-        assign J_type = (op[5:1] == 5'b00001);
-        assign R_type = ~(|op);
-        assign REGIMM = (op == 6'b000001);
-        assign lui = (op == 6'b001111);
-
-        // unconditional jump
-        assign PCWrite     = current_state[2] && Inst_Valid || current_state[4] && jmp;
-        // conditional jump
-        assign PCWriteCond = current_state[4] && (REGIMM || I_type_branch);
-        assign MemRead     = current_state[6] && ~rst;
-        assign MemWrite    = current_state[5] && ~rst;
-        // to select the source of PC
-        assign PCsource[1] = current_state[4] && jmp;
-        assign PCsource[0] = current_state[4] && branch;
-        // to select the second oprand of ALU
-        assign ALUSrcB[1]  = current_state[5] || current_state[6] || current_state[4] && (op[3] || op[5]) || current_state[3] && branch;
-        assign ALUSrcB[0]  = current_state[5] || current_state[6] || current_state[2] || current_state[4] && link || current_state[3] && branch;
-        // to select the first oprand of ALU, RF_rdata1 or PC
-        assign ALUSrcA     = (current_state[4] && ~link) || (current_state[3] && ~branch);
-        assign RegWrite    = current_state[8];
-        assign IRWrite     = current_state[2] && Inst_Ready && Inst_Valid;
-        assign MemtoReg    = current_state[8] && load;
-        assign RegDst      = current_state[8] && R_type;
-        assign ImmDst      = current_state[8] && (op[5] || op[3]);
-
-        // ALUEx is only used in EX state
-        wire [2:0] ALUEx;
-
-        // first decode of ALUop by opcode, then we still need to use the ALUcontroler module to decode
-        assign ALUEx[2] = ~op[5] && (~op[3] || op[1] && ~op[0]);
-        assign ALUEx[1] = op[5] || (op[3] ^ op[2]) || REGIMM;
-        assign ALUEx[0] = R_type || REGIMM || ~op[5] && (~op[2] && op[1] || ~op[3] && op[2] && op[1] || op[3] && op[2] && op[0]);
-
-        assign ALUop = (current_state[2] || current_state[3] || current_state[4] && link) ? 3'b010
-                                                                                          : ALUEx;
-
-        // counter ******************************************************************
-        reg [31:0] cycle_cnt, IW_cnt, memR_cnt, memW_cnt, jmp_times, branch_times, branchValid_times, Inst_num, NOP_num;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        cycle_cnt <= 32'b0;
-                end
-                else begin
-                        cycle_cnt <= cycle_cnt + 32'b1;
-                end
-        end
-        assign cpu_perf_cnt_0 = cycle_cnt;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        IW_cnt <= 32'b0;
-                end
-                else if (current_state[2]) begin
-                        IW_cnt <= IW_cnt + 32'b1;
-                end
-                else begin
-                        IW_cnt <= IW_cnt;
-                end
-        end
-        assign cpu_perf_cnt_1 = IW_cnt;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        jmp_times <= 32'b0;
-                end
-                else if (jmp && current_state[3]) begin
-                        jmp_times <= jmp_times + 32'b1;
-                end
-                else begin
-                        jmp_times <= jmp_times;
-                end
-        end
-        assign cpu_perf_cnt_2 = jmp_times;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        branch_times <= 32'b0;
-                end
-                else if (branch && current_state[3]) begin
-                        branch_times <= branch_times + 32'b1;
-                end
-                else begin
-                        branch_times <= branch_times;
-                end
-        end
-        assign cpu_perf_cnt_3 = branch_times;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        branchValid_times <= 32'b0;
-                end
-                else if (branchValid && current_state[4]) begin
-                        branchValid_times <= branchValid_times + 32'b1;
-                end
-                else begin
-                        branchValid_times <= branchValid_times;
-                end
-        end
-        assign cpu_perf_cnt_4 = branchValid_times;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        memR_cnt <= 32'b0;
-                end
-                else if (current_state[6] || current_state[7]) begin
-                        memR_cnt <= memR_cnt + 32'b1;
-                end
-                else begin
-                        memR_cnt <= memR_cnt;
-                end
-        end
-        assign cpu_perf_cnt_5 = memR_cnt;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        memW_cnt <= 32'b0;
-                end
-                else if (current_state[5]) begin
-                        memW_cnt <= memW_cnt + 32'b1;
-                end
-                else begin
-                        memW_cnt <= memW_cnt;
-                end
-        end
-        assign cpu_perf_cnt_6 = memW_cnt;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        Inst_num <= 32'b0;
-                end
-                else if (current_state[3]) begin
-                        Inst_num <= Inst_num + 32'b1;
-                end
-                else begin
-                        Inst_num <= Inst_num;
-                end
-        end
-        assign cpu_perf_cnt_7 = Inst_num;
-
-        always @(posedge clk) begin
-                if (rst) begin
-                        NOP_num <= 32'b0;
-                end
-                else if (current_state[3] && NOP) begin
-                        NOP_num <= NOP_num + 32'b1;
-                end
-                else begin
-                        NOP_num <= NOP_num;
-                end
-        end
-        assign cpu_perf_cnt_8 = NOP_num;
-
-        reg [31:0] intr_num;
-        always @(posedge intr) begin
-                if (rst)
-                        intr_num <= 0;
-                else if (current_state[9]) 
-                        intr_num <= intr_num + 1;
-                else
-                        intr_num <= intr_num;
-        end
-        assign cpu_perf_cnt_9 = intr_num;
+  // cnt_15: Register File Writes
+  always @(posedge clk) begin
+    if (rst) begin
+      perf_reg_writes_count <= 32'd0;
+    end else if (increment_reg_writes) begin
+      perf_reg_writes_count <= perf_reg_writes_count + 1;
+    end
+  end
+  assign cpu_perf_cnt_15 = perf_reg_writes_count;
 
 endmodule
 
 
-// if ALUop is not 101, we can get ALUop only by op. So the input ALUop is the real ALUop
-// if ALUop is 101, we must get ALUop by func because it is R-type instruction
-module ALU_controler(
-        input [2:0] ALUop,
-        input [5:0] func,
-        output [2:0] ALUcontrol
+//==============================================================================
+// Module: pc (Remains unchanged)
+// Description: Program Counter register. Stores the address of the next
+//              instruction to be fetched.
+//==============================================================================
+module pc (
+    input         clk,
+    input         rst,
+    input  [ 9:0] current_state, // Current state of the FSM
+    input         pc_write_enable,
+    input  [31:0] next_pc,
+    output reg [31:0] pc
 );
-        wire R_type = (ALUop == 3'b101);
-        wire [2:0] funcOP;
-        assign funcOP[2] =  func[1] && (~func[3] || ~func[0]);
-        assign funcOP[1] = ~func[2] && (~func[3] || func[1]);
-        assign funcOP[0] =  func[2] && func[0] || func[3] && func[1];
-
-        assign ALUcontrol = {3{ R_type}} & funcOP
-                          | {3{~R_type}} & ALUop;
-
+  always @(posedge clk) begin
+    if (rst) begin
+      pc <= 32'h00000000;
+    end else if (current_state == 10'b1000000000) begin
+      pc <= 32'h100;
+    end else if (pc_write_enable) begin
+      pc <= next_pc;
+    end
+  end
 endmodule
+
 
