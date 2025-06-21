@@ -122,7 +122,7 @@ module engine_core #(
   assign ctrl_stat = ctrl_stat_reg;
 
   // FSM implementation
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if (rst) begin
       current_state_RD <= IDLE;
       current_state_WR <= IDLE;
