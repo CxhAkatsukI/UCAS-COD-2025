@@ -77,7 +77,7 @@ module custom_cpu (
     wire        ifu_valid_to_fd_reg;
     wire [31:0] pc_value_at_fetch_time; // Wire to capture PC from IFU for FD reg
 
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
             fd_instruction_reg <= 32'h00000013; // NOP
             fd_pc_reg          <= 32'h0;
@@ -170,7 +170,7 @@ module custom_cpu (
     reg        de_rf_wen_reg;
     reg [4:0]  de_rf_waddr_reg;         // This is 'rd'
 
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
             de_inst_valid_reg       <= 1'b0;
             de_pc_reg               <= 32'b0;
@@ -241,7 +241,7 @@ module custom_cpu (
     reg        em_rf_wen_reg;
     reg [4:0]  em_rf_waddr_reg;           // rd
 
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
             em_inst_valid_reg       <= 1'b0;
             em_pc_reg               <= 32'b0;
@@ -290,7 +290,7 @@ module custom_cpu (
     reg        mw_rf_wen_reg;
     reg [4:0]  mw_rf_waddr_reg;   // rd
 
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
             mw_inst_valid_reg   <= 1'b0;
             mw_pc_reg           <= 32'b0;
@@ -362,9 +362,6 @@ module custom_cpu (
     //--------------------------------------------------------------------------
     // Instantiate Pipeline Stage Modules
     //--------------------------------------------------------------------------
-    wire ifu_IRWrite_out;
-    wire ifu_IF_stall_out;
-    wire ifu_IW_stall_out;
     ifu ifu_inst (
         .clk                    (clk),
         .rst                    (rst),
@@ -390,9 +387,6 @@ module custom_cpu (
 
     assign pc_value_at_fetch_time = PC; // Capture PC at fetch time
 
-    wire idu_is_branch_out;
-    wire idu_is_jump_out;
-    wire idu_is_nop_out;
     idu idu_inst (
         .clk            (clk),
         .rst            (rst),
@@ -439,7 +433,6 @@ module custom_cpu (
         .shift_result (exu_shift_result_out)  // To EX/MEM reg & FWDU
     );
 
-    wire memu_RDW_stall_out;
     memu memu_inst (
         .clk                    (clk),
         .rst                    (rst),
@@ -589,36 +582,31 @@ module ifu (
           next_state = IF;
         end
       end
-//      IF : begin
-//        if (Inst_Req_Ready) begin
-//          next_state = IW;
-//        end
-//        else begin
-//          next_state = IF;
-//        end
-//      end
-//      IW : begin
-//        if (Inst_Valid) begin
-//          next_state = RDY;
-//        end
-//        else begin
-//          next_state = IW;
-//        end
-//      end
-      IF : begin // to boost frequency, this state handles both instruction fetch and stall
+      IF : begin
+        if (ld_use_branch_handler) begin
+          next_state = STA;
+        end
+        if (Inst_Req_Ready) begin
+          next_state = IW;
+        end
+        else begin
+          next_state = IF;
+        end
+      end
+      IW : begin
+        if (ld_use_branch_handler) begin
+          next_state = STA;
+        end
         if (Inst_Valid) begin
           next_state = RDY;
-        end else begin
-          next_state = IF;
+        end
+        else begin
+          next_state = IW;
         end
       end
       RDY : begin
         if (pipeline_advance_enable) begin
-          if (is_sequential_fetch) begin
-            next_state = IF;
-          end else begin
-            next_state = STA;
-          end
+          next_state = STA;
         end
         else begin
           next_state = RDY;
@@ -638,31 +626,18 @@ module ifu (
   end
 
   // -- FSM Output Logic --
-  wire pc_write_enable;
-  assign IRWrite = (current_state == IF) && Inst_Valid;
+  assign IRWrite = (current_state == IW) && Inst_Valid;
   assign Inst_Req_Valid = (current_state == IF); // Request instruction fetch
-  assign Inst_Ready = (current_state == INIT) || (current_state == IF);
+  assign Inst_Ready = (current_state == INIT) || (current_state == IW);
   assign IF_Ready = (current_state == RDY);
   assign pc_write_enable = (current_state == STA) && !ld_use_harzard;
-  assign pc_write_sequential = (current_state == RDY) && is_sequential_fetch && !ld_use_harzard && pipeline_advance_enable;
   assign IF_stall = (current_state == IF && !Inst_Req_Ready && !rst);
   assign IW_stall = (current_state == IW && !Inst_Valid && !rst);
 
-  wire [ 6:0] opcode;               // Opcode field
-  assign opcode = IR[6:0];
-  wire is_sequential_fetch;
-  assign is_sequential_fetch = !(opcode == 7'b1101111) && // JAL
-                               !(opcode == 7'b1100111) && // JALR
-                               !(opcode == 7'b1100011);   // Store
-  wire [31:0] sequential_next_pc;
-  assign sequential_next_pc = PC + 4; // Sequential fetch is just PC + 4
 
   always @(posedge clk) begin
     if (rst) begin
       PC <= 32'b0;
-    end
-    else if (pc_write_sequential) begin
-      PC <= sequential_next_pc;
     end
     else if (pc_write_enable || ld_use_branch_handler) begin
       PC <= next_pc;
@@ -674,7 +649,7 @@ module ifu (
       IR <= 32'b0;
       fetched_inst_valid <= 0;
     end
-    else if (current_state == IF && Inst_Valid) begin
+    else if (current_state == IW && Inst_Valid) begin
       IR <= instruction;
       fetched_inst_valid <= 1'b1;
     end
@@ -735,6 +710,7 @@ module idu (
     localparam ALU_XOR  = 3'b100;
     localparam ALU_SUB  = 3'b110;
     localparam ALU_SLT  = 3'b111; // Set Less Than (Signed)
+    localparam ALU_MUL  = 3'b101;
 
     // Codes used to indicate operation is handled by shifter, not main ALU path for result
     localparam ALU_SLL  = 3'b000; // Logical Shift Left
@@ -810,7 +786,7 @@ module idu (
   assign      is_jalr  = (opcode == 7'b1100111); // JALR instruction
   assign      is_lui   = (opcode == 7'b0110111); // LUI instruction
   assign      is_auipc = (opcode == 7'b0010111); // AUIPC instruction
-  assign      is_nop   = (IR    == 32'h00000013); // NOP instruction
+  assign      is_nop   = (IR    == 8'h00000013); // NOP instruction
 
   // -- Control Signals for Instruction Types --
   assign      is_I     = is_OPIMM || is_load || is_jalr; // I-type instruction
@@ -838,9 +814,9 @@ module idu (
                                         32'b0;         // Default to zero
 
   assign shifter_src1 = RF_rdata1;                        // Source for shift operations is always rs1
-  assign shifter_src2 = (is_R) ? RF_rdata2      :         // R-type shifts use lower 5 bits of rs2
-                        (is_I) ? imm            :         // I-type shifts use lower 5 bits of immediate (shamt)
-                                 32'b0;                    // Default
+  assign shifter_src2 = (is_R) ? RF_rdata2[4:0] :         // R-type shifts use lower 5 bits of rs2
+                        (is_I) ? imm[4:0]       :         // I-type shifts use lower 5 bits of immediate (shamt)
+                                 5'b0;                    // Default
 
   // Control Signals for ALU and Shifter
   wire funct7_5 = funct7[5]; // Bit 5 of funct7 (differentiates ADD/SUB, SRL/SRA)
@@ -848,7 +824,8 @@ module idu (
   // ALU Operation (alu_op) Selection Logic
   assign alu_op =
       is_R ? // R-Type instructions (opcode: 0110011)
-          (funct3 == 3'b000 ? (funct7_5 ? ALU_SUB : ALU_ADD)  : // ADD/SUB
+          (funct3 == 3'b000 && funct7[0] ? ALU_MUL            : // MUL (funct7[0] indicates MUL)
+           funct3 == 3'b000 ? (funct7_5 ? ALU_SUB : ALU_ADD)  : // ADD/SUB
            funct3 == 3'b001 ? ALU_SLL                         : // SLL (handled by shifter)
            funct3 == 3'b010 ? ALU_SLT                         : // SLT
            funct3 == 3'b011 ? ALU_SLTU                        : // SLTU
@@ -1001,7 +978,7 @@ module exu (
 
   shifter instance_shifter (
       .A          (shifter_src1),         // Input Data from Src Sel
-      .B          (shifter_src2[4:0]),         // Input Shift Amount from Src Sel
+      .B          (shifter_src2),         // Input Shift Amount from Src Sel
       .Shiftop    (shifter_op),           // Input Opcode from ID
       .Result     (shift_result)          // Output: Shifter result -> To WB
   );
@@ -1049,7 +1026,7 @@ module memu (
   reg  [4:0] current_state;
   wire [4:0] next_state;
 
-  always @(posedge clk) begin
+  always @(posedge clk or posedge rst) begin
     if (rst) begin
       current_state <= RDY;
     end else begin
