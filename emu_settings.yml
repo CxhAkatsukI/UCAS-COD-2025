@@ -15,7 +15,7 @@ variables:
   EMU_MANUAL_REPLAY_BEGIN: 0
 
   # Specify the count of last cycles to replay
-  EMU_REPLAY_WINDOW: 100000000
+  EMU_REPLAY_WINDOW: 1000000
 
   # Timeout (in cycles)
   EMU_TIMEOUT: 100000000000
