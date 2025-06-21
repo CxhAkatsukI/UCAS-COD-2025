@@ -1,2 +1,2 @@
 
-BENCH_GROUP := dnn_test
+BENCH_GROUP := dma_test

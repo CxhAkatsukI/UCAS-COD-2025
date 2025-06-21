@@ -81,8 +81,8 @@ module custom_cpu (
   wire [31:0] imm_B_ext;            // Sign-extended branch immediate
   wire [31:0] lui_result;           // Result for LUI instruction
   wire        use_zero_extend;      // Control for immediate extension type
-  reg  [ 8:0] current_state;        // Current state of the FSM
-  reg  [ 8:0] next_state;           // Next state of the FSM
+  reg  [ 9:0] current_state;        // Current state of the FSM
+  reg  [ 9:0] next_state;           // Next state of the FSM
   reg  [31:0] IR;                   // Instruction Register (holds current instruction)
 
   wire        reg_dst_input;          // Selects destination register (rd/rt/ra hint)
@@ -144,6 +144,10 @@ module custom_cpu (
   wire [ 4:0] RF_waddr;               // Write address to RegFile
   reg  [31:0] RF_wdata;               // Write data to RegFile
 
+  // -- Signals for interrupt handling --
+  reg intr_mask; // Interrupt mask (1: interrupts enabled, 0: disabled)
+  wire is_eret; // Indicates ERET instruction
+
 /* The following signal is leveraged for behavioral simulation,
 * which is delivered to testbench.
 *
@@ -159,22 +163,23 @@ module custom_cpu (
 * }
 *
 */
-  assign inst_retire = {RF_wen, RF_waddr, RF_wdata, current_pc}; // Assigning the inst_retire signal with the required information
+  // assign inst_retire = {RF_wen, RF_waddr, RF_wdata, current_pc}; // Assigning the inst_retire signal with the required information
 
   //============================================================================
   // PIPELINE STAGE 0: FSM Implementation
   //============================================================================
 
 // -- FSM State Definitions --
-localparam INIT = 9'b000000001, // Initial State
-           IF   = 9'b000000010, // Instruction Fetch
-           IW   = 9'b000000100, // Instruction Wait
-           ID   = 9'b000001000, // Instruction Decode
-           EX   = 9'b000010000, // Execute
-           ST   = 9'b000100000, // Store - Memory Write
-           LD   = 9'b001000000, // Load - Memory Read
-           RDW  = 9'b010000000, // Read Data Wait
-           WB   = 9'b100000000; // Write Back
+localparam INIT = 10'b0000000001, // Initial State
+           IF   = 10'b0000000010, // Instruction Fetch
+           IW   = 10'b0000000100, // Instruction Wait
+           ID   = 10'b0000001000, // Instruction Decode
+           EX   = 10'b0000010000, // Execute
+           ST   = 10'b0000100000, // Store - Memory Write
+           LD   = 10'b0001000000, // Load - Memory Read
+           RDW  = 10'b0010000000, // Read Data Wait
+           WB   = 10'b0100000000, // Write Back
+           INTR = 10'b1000000000; // Interrupt handling
 
   // -- FSM State Register --
   always @(posedge clk) begin
@@ -197,13 +202,17 @@ localparam INIT = 9'b000000001, // Initial State
         end
       end
       IF : begin
-        if (Inst_Req_Ready) begin
+        if (intr && !intr_mask) begin
+          next_state = INTR;
+        end
+        else if (Inst_Req_Ready) begin
           next_state = IW;
         end
         else begin
           next_state = IF;
         end
       end
+      INTR : next_state = IF; // Interrupt handling state, fetch ISR instructions
       IW : begin
         if (Inst_Valid) begin
           next_state = ID;
@@ -284,6 +293,29 @@ localparam INIT = 9'b000000001, // Initial State
     end
   end
 
+  // -- EPC Register Logic --
+  reg [31:0] EPC;        // Exception Program Counter (EPC) register
+  always @(posedge clk) begin
+    if (rst) begin
+      EPC <= 32'b0;      // Reset EPC to 0
+    end else if (current_state == INTR) begin
+      EPC <= current_pc; // Store current PC in EPC on interrupt
+    end else begin
+      EPC <= EPC;        // Keep EPC unchanged otherwise
+    end
+  end
+
+  // -- interrupt mask logic --
+  always @(posedge clk) begin
+    if (rst || (current_state == ID && is_eret)) begin
+      intr_mask <= 1'b0; // Reset mask to enable interrupts
+    end else if (current_state == INTR) begin
+      intr_mask <= 1'b1; // Disable interrupts during interrupt handling
+    end else begin
+      intr_mask <= intr_mask; // Re-enable interrupts after handling
+    end
+  end
+
 
   //============================================================================
   // PIPELINE STAGE 1: Instruction Fetch (IF)
@@ -292,10 +324,12 @@ localparam INIT = 9'b000000001, // Initial State
   //-- PC Register --
   wire pc_write_enable = (current_state == IW && next_state == ID) ||                                          // Always update after IF (for PC+4 usually)
                        ((current_state == EX) && is_jump) ||                               // Update for any jump in EX
-                       ((current_state == EX) && is_branch && branch_condition_satisfied); // Update for taken branch in EX
+                       ((current_state == EX) && is_branch && branch_condition_satisfied) ||
+                       ((current_state == ID) && is_eret); // Update for taken branch in EX
   pc instance_pc (
       .clk        (clk),
       .rst        (rst),
+      .current_state   (current_state), // Input: Current FSM state (to control PC updates)
       .pc_write_enable (pc_write_enable), // Input: PC write enable signal (from control logic)
       .next_pc    (next_pc),              // Input: Next PC value (Calculated in EX stage)
       .pc         (current_pc)            // Output: Current PC value (Used across stages)
@@ -327,6 +361,7 @@ localparam INIT = 9'b000000001, // Initial State
   //-- Primary Control Signal Generation (Purely from Instruction) --
   wire        is_branch_sub     = (opcode[5:2] == 4'b0001);                    // Specific branch types
   wire        is_branch_slt     = (opcode == 6'b000001);                       // Branches that use slt as alu_op
+  assign      is_eret           = (IR == 32'h42000018);                        // ERET instruction (used in ID)
   assign      is_branch         = (is_branch_sub || is_branch_slt);            // General branch flag
   assign      reg_dst_input     = opcode[5] ^ opcode[3];                       // Hint for WB Stage dest reg sel
   assign      mem_read_internal = (current_state == LD) && (opcode[5:3] == 3'b100); // Control for MEM Stage
@@ -465,8 +500,9 @@ localparam INIT = 9'b000000001, // Initial State
 
   // Next PC Selection based on control signals (ID) and conditions (EX)
   assign      next_pc            = (rst)                                                    ? 32'h00000000 :          // Reset PC value
-                                   (current_state == EX && is_jump)                         ? jump_target  :          // Jump target selection
-                                   (current_state == EX && is_branch && branch_condition_satisfied) ? branch_target : // Branch target selection
+                                   (!is_eret && current_state == EX && is_jump)                         ? jump_target  :          // Jump target selection
+                                   (!is_eret && current_state == EX && is_branch && branch_condition_satisfied) ? branch_target : // Branch target selection
+                                   (is_eret) ? EPC :                                                     // ERET instruction -> Use EPC
                                    current_pc + 4;                                                                    // Default: PC + 4 -> To IF
 
   // PC+8 Calculation for Link Instructions (Uses ID signal, IF PC)
@@ -817,6 +853,7 @@ endmodule
 module pc (
     input         clk,
     input         rst,
+    input  [ 9:0] current_state, // Current state of the FSM
     input         pc_write_enable,
     input  [31:0] next_pc,
     output reg [31:0] pc
@@ -824,6 +861,8 @@ module pc (
   always @(posedge clk) begin
     if (rst) begin
       pc <= 32'h00000000;
+    end else if (current_state == 10'b1000000000) begin
+      pc <= 32'h100;
     end else if (pc_write_enable) begin
       pc <= next_pc;
     end
